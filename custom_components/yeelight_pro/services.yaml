@@ -1,0 +1,26 @@
+send_command:
+  description: Send command to gateway
+  fields:
+    host:
+      description: Gateway host
+      example: 192.168.26.150
+      required: true
+      selector:
+        text:
+    method:
+      description: Command method
+      example: gateway_get.node
+      required: true
+      selector:
+        text:
+    params:
+      description: Command params
+      example: '{"id":0}'
+      selector:
+        object:
+    throw:
+      description: Throw result
+      default: true
+      example: true
+      selector:
+        boolean:

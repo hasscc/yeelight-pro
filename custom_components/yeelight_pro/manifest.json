@@ -1,0 +1,11 @@
+{
+  "domain": "yeelight_pro",
+  "name": "Yeelight Pro",
+  "codeowners": ["@al-one"],
+  "config_flow": true,
+  "documentation": "https://github.com/hasscc/yeelight-pro",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/hasscc/yeelight-pro/issues",
+  "requirements": [],
+  "version": "0.0.1"
+}

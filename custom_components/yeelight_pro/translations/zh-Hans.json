@@ -1,0 +1,33 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Yeelight Pro",
+        "description": "{tip}",
+        "data": {
+          "host": "网关IP"
+        }
+      }
+    },
+    "error": {
+      "cannot_access": "无法访问网关"
+    },
+    "abort": {
+      "already_configured": "该网关已经配置过"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Yeelight Pro",
+        "description": "{tip}",
+        "data": {
+          "host": "网关IP"
+        }
+      }
+    },
+    "error": {
+      "cannot_access": "无法访问网关"
+    }
+  }
+}
