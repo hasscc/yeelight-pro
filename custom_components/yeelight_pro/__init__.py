@@ -214,7 +214,6 @@ class XEntity(Entity):
         self._attr_icon = self._option.get('icon')
         self._attr_entity_picture = self._option.get('picture')
         self._attr_device_class = self._option.get('class')
-        self._attr_unit_of_measurement = self._option.get('unit')
         self._attr_entity_category = self._option.get('category')
         self._attr_translation_key = self._option.get('translation_key', conv.attr)
 
