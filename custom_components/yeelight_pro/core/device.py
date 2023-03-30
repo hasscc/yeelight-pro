@@ -66,14 +66,14 @@ class XDevice:
         self.prop = {}
         self.entities: Dict[str, "XEntity"] = {}
         self.gateways: List["ProGateway"] = []
+        self.converters = {}
         self.setup_converters()
 
     def setup_converters(self):
-        self.converters = {}
+        pass
 
     def add_converter(self, conv: Converter):
-        if conv.attr not in self.converters:
-            self.converters[conv.attr] = conv
+        self.converters[conv.attr] = conv
 
     @staticmethod
     async def from_node(gateway: "ProGateway", node: dict):

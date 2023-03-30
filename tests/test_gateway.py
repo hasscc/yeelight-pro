@@ -15,7 +15,13 @@ class Hass(HomeAssistant):
         self.events.append(args)
 
 
+def get_gateway(host=None):
+    if not host:
+        host = '127.0.0.1'
+    return ProGateway(host)
+
+
 def test_gateway():
     host = '127.0.0.1'
-    gtw = ProGateway(host)
+    gtw = get_gateway(host)
     assert gtw.host == host
