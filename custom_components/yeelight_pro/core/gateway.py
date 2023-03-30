@@ -6,7 +6,7 @@ import ifaddr
 import json
 import platform
 from ipaddress import IPv4Network
-from typing import Callable, Dict, Union
+from typing import Callable, Dict, Union, Optional
 
 from .device import XDevice, GatewayDevice
 from .converters.base import Converter
@@ -20,9 +20,9 @@ class ProGateway:
     port: int = 65443
     device: "GatewayDevice" = None
 
-    reader: asyncio.StreamReader = None
-    writer: asyncio.StreamWriter = None
-    main_task: asyncio.Task = None
+    reader: Optional[asyncio.StreamReader] = None
+    writer: Optional[asyncio.StreamWriter] = None
+    main_task: Optional[asyncio.Task] = None
 
     def __init__(self, host: str, **options):
         self.host = host
@@ -95,15 +95,15 @@ class ProGateway:
                     continue
                 await self.readline()
             except Exception as exc:
-                self.log.error('Main loop error', exc_info=exc)
+                self.log.error('Main loop error: %s', [type(exc), exc])
         self.log.debug('Stop main loop')
 
     async def connect(self):
         try:
             res = await asyncio.wait_for(self._connect(), self.timeout)
-        except Exception as exc:
+        except (ConnectionError, Exception) as exc:
             res = False
-            self.log.error('Gateway connect error', exc_info=exc)
+            self.log.error('Gateway connect error: %s', [self.host, type(exc), exc])
         return res
 
     async def _connect(self):
@@ -114,6 +114,7 @@ class ProGateway:
                 return False
             if fut := self._msgs.get('ready'):
                 fut.set_result(True)
+                del self._msgs['ready']
         return True
 
     async def check_available(self):
@@ -129,10 +130,17 @@ class ProGateway:
         while True:
             try:
                 buf = await self.reader.readline()
-            except Exception as exc:
+            except (ConnectionError, BrokenPipeError, Exception) as exc:
                 buf = None
-                self.log.error('Readline error', exc_info=exc)
-                await asyncio.sleep(5)
+                if isinstance(exc, (ConnectionError, BrokenPipeError)):
+                    try:
+                        self.writer.close()
+                        await self.writer.wait_closed()
+                    except (BrokenPipeError, Exception) as ce:
+                        self.log.error('Connection close error: %s', [type(ce), ce])
+                    self.writer = None
+                self.log.error('Readline error: %s', [type(exc), exc])
+                await asyncio.sleep(self.timeout - 0.1)
             if not buf:
                 break
             msg += buf
@@ -172,6 +180,8 @@ class ProGateway:
                 dvc.event_fired(node)
 
     async def send(self, method, wait_result=True, **kwargs):
+        if not self.writer:
+            await self.connect()
         if method == 'gateway_get.topology':
             cid = 'gateway_post.topology'
         else:
