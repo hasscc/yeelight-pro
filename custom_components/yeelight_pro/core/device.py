@@ -108,6 +108,7 @@ class XDevice:
             if gateway.pid == 2:
                 await gateway.get_node(dvc.id, wait_result=False)
             await gateway.add_device(dvc)
+            _LOGGER.info('Setup device: %s', [type(dvc), node])
         return dvc
 
     @staticmethod
@@ -119,7 +120,7 @@ class XDevice:
             dls.append(dvc)
         return dls
 
-    def prop_changed(self, data: dict):
+    async def prop_changed(self, data: dict):
         has_new = False
         for k in data.keys():
             if k not in self.prop:
@@ -128,9 +129,10 @@ class XDevice:
         self.prop.update(data)
         if has_new:
             self.setup_converters()
+            await self.setup_entities()
         self.update(self.decode(data))
 
-    def event_fired(self, data: dict):
+    async def event_fired(self, data: dict):
         self.update(self.decode_event(data))
 
     @property
@@ -161,6 +163,8 @@ class XDevice:
     async def setup_entities(self):
         if not (gateway := self.gateway):
             return
+        if not self.converters:
+            _LOGGER.warning('Device has none converters: %s', [type(self), self.id])
         for conv in self.converters.values():
             domain = conv.domain
             if domain is None:

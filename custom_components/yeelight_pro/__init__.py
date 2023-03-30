@@ -179,8 +179,14 @@ class ComponentServices:
     async def async_send_command(self, call):
         dat = call.data or {}
         gip = dat.get(CONF_HOST)
-        gtw = self.hass.data[DOMAIN][CONF_GATEWAYS].get(gip) if gip else None
-        if not isinstance(gtw, ProGateway):
+        gtw = None
+        for g in self.hass.data[DOMAIN][CONF_GATEWAYS].values():
+            if not isinstance(gtw, ProGateway):
+                continue
+            if g.host == gip or not gip:
+                gtw = g
+                break
+        if not gtw:
             _LOGGER.warning('Gateway %s not found.', gip)
             return False
         method = dat['method']

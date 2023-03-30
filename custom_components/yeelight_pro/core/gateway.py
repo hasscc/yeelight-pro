@@ -174,10 +174,10 @@ class ProGateway:
                 continue
             if cmd in ['gateway_post.prop', 'device_post.prop']:
                 # node prop
-                dvc.prop_changed(node)
+                await dvc.prop_changed(node)
             if cmd in ['gateway_post.event', 'device_post.event']:
                 # node event
-                dvc.event_fired(node)
+                await dvc.event_fired(node)
 
     async def send(self, method, wait_result=True, **kwargs):
         if not self.writer:

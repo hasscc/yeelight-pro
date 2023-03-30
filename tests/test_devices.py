@@ -30,7 +30,7 @@ def test_light():
     assert isinstance(device, LightDevice)
 
     prop = {"id": 1001, "nt": 2, "o": True, "fv": "1.0.1", "params": {"p": True, "l": 20, "c": 255, "ct": 4000}}
-    device.prop_changed(prop)
+    asyncio.run(device.prop_changed(prop))
     data = device.decode(prop)
     assert data['light'] is True
     assert data['brightness'] == round(255 * 20 / 100)
@@ -48,7 +48,7 @@ def test_relay():
             "p": False, "1-p": True, "2-p": False,
         }
     }
-    device.prop_changed(prop)
+    asyncio.run(device.prop_changed(prop))
     data = device.decode(prop)
     assert data['switch1'] is True
     assert data['switch2'] is False
@@ -65,7 +65,7 @@ def test_switch_panel():
             "0-blp": True, "1-sp": False, "2-sp": True, "3-sp": True,
         }
     }
-    device.prop_changed(prop)
+    asyncio.run(device.prop_changed(prop))
     data = device.decode(prop)
     assert data['switch1'] is False
     assert data['switch2'] is True
