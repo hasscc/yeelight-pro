@@ -5,6 +5,7 @@ from homeassistant.core import callback
 from homeassistant.const import STATE_ON
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
+    BinarySensorDeviceClass,
     DOMAIN as ENTITY_DOMAIN,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -53,3 +54,8 @@ class XBinarySensorEntity(XEntity, BinarySensorEntity, RestoreEntity):
         for k, v in attrs.items():
             if k in self.subscribed_attrs:
                 self._attr_extra_state_attributes[k] = v
+
+        if self._name == 'motion':
+            self._attr_device_class = BinarySensorDeviceClass.MOTION
+        if self._name == 'contact':
+            self._attr_device_class = BinarySensorDeviceClass.DOOR
