@@ -2,7 +2,7 @@ import logging
 from enum import IntEnum
 from .converters.base import *
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Dict, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .. import XEntity
@@ -40,7 +40,7 @@ class DeviceType(IntEnum):
     MAGNET_SENSOR = 130
     KNOB = 132
     MOTION_WITH_LIGHT = 134
-    ILLUMINATION_SENSOR = 125
+    ILLUMINATION_SENSOR = 135
     TEMPERATURE_HUMIDITY = 136
 
 
@@ -367,7 +367,7 @@ class MotionDevice(XDevice):
         self.add_converter(EventConv('motion.true'))
         self.add_converter(EventConv('motion.false'))
         if self.type in [DeviceType.MOTION_WITH_LIGHT]:
-            self.add_converter(PropBoolConv('light', 'sensor', prop='level'))
+            self.add_converter(PropConv('light', 'sensor', prop='level'))
 
 
 class ContactDevice(XDevice):
