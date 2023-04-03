@@ -110,6 +110,18 @@ class ColorTempKelvin(PropConv):
         super().encode(device, payload, value)
 
 
+class ColorRgbConv(PropConv):
+    def decode(self, device: "XDevice", payload: dict, value: int):
+        red = (value >> 16) & 0xFF
+        green = (value >> 8) & 0xFF
+        blue = value & 0xFF
+        payload[self.attr] = (red, green, blue)
+
+    def encode(self, device: "XDevice", payload: dict, value: tuple):
+        value = (value[0] << 16) | (value[1] << 8) | value[2]
+        super().encode(device, payload, value)
+
+
 @dataclass
 class EventConv(Converter):
     event: str = ''

@@ -283,6 +283,8 @@ class LightDevice(XDevice):
             self.add_converter(BrightnessConv('brightness', prop='l', parent='light'))
         if ColorMode.COLOR_TEMP in self.color_modes:
             self.add_converter(ColorTempKelvin('color_temp', prop='ct', parent='light'))
+        if ColorMode.RGB in self.color_modes:
+            self.add_converter(ColorRgbConv('rgb_color', prop='c', parent='light'))
 
     @property
     def color_modes(self):
@@ -297,7 +299,7 @@ class LightDevice(XDevice):
         if self.type == DeviceType.LIGHT_WITH_COLOR:
             modes.add(ColorMode.BRIGHTNESS)
             modes.add(ColorMode.COLOR_TEMP)
-            modes.add(ColorMode.HS)
+            modes.add(ColorMode.RGB)
         return modes
 
 

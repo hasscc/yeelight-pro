@@ -12,6 +12,7 @@ from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_COLOR_TEMP,
     ATTR_COLOR_TEMP_KELVIN,
+    ATTR_RGB_COLOR,
     ATTR_TRANSITION,
 )
 
@@ -66,6 +67,8 @@ class XLightEntity(XEntity, LightEntity):
                 self._attr_max_mireds = int(1000000 / cov.mink)
                 self._attr_min_color_temp_kelvin = cov.mink
                 self._attr_max_color_temp_kelvin = cov.maxk
+        if device.converters.get(ATTR_RGB_COLOR):
+            self._attr_supported_color_modes.add(ColorMode.RGB)
 
         self._target_attrs = {}
 
@@ -104,6 +107,8 @@ class XLightEntity(XEntity, LightEntity):
             self._attr_brightness = data[ATTR_BRIGHTNESS]
         if ATTR_COLOR_TEMP in data:
             self._attr_color_temp = data[ATTR_COLOR_TEMP]
+        if ATTR_RGB_COLOR in data:
+            self._attr_rgb_color = data[ATTR_RGB_COLOR]
 
     async def async_turn_on(self, **kwargs):
         """Turn the entity on."""
