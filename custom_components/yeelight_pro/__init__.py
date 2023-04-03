@@ -18,7 +18,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .core.const import *
 from .core.gateway import ProGateway
-from .core.device import XDevice, GatewayDevice
+from .core.device import XDevice, GatewayDevice, WifiPanelDevice
 from .core.converters.base import Converter
 
 _LOGGER = logging.getLogger(__name__)
@@ -55,7 +55,6 @@ async def async_setup(hass: HomeAssistant, hass_config: dict):
     gws = hass_config.get(DOMAIN, {}).get(CONF_GATEWAYS) or []
     for gwc in gws:
         host = gwc.get(CONF_HOST)
-        _LOGGER.debug('Gateway: %s', gwc)
         if not host:
             continue
         gtw = await get_gateway_from_config(hass, gwc)
@@ -74,31 +73,26 @@ async def async_setup(hass: HomeAssistant, hass_config: dict):
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     init_integration_data(hass)
-    await hass.config_entries.async_forward_entry_setups(config_entry, SUPPORTED_DOMAINS)
+    await hass.config_entries.async_forward_entry_setups(entry, SUPPORTED_DOMAINS)
 
-    if gtw := await get_gateway_from_config(hass, config_entry):
+    if gtw := await get_gateway_from_config(hass, entry):
         await gtw.start()
 
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, gtw.stop)
+    )
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry):
-    gtw = hass.data[DOMAIN][CONF_GATEWAYS].get(config_entry.entry_id)
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
+    gtw = hass.data[DOMAIN][CONF_GATEWAYS].get(entry.entry_id)
     if isinstance(gtw, ProGateway):
         await gtw.stop()
-        hass.data[DOMAIN][CONF_GATEWAYS].pop(config_entry.entry_id)
+        hass.data[DOMAIN][CONF_GATEWAYS].pop(entry.entry_id)
 
-    unload_ok = all(
-        await asyncio.gather(
-            *[
-                hass.config_entries.async_forward_entry_unload(config_entry, sd)
-                for sd in SUPPORTED_DOMAINS
-            ]
-        )
-    )
-    return unload_ok
+    return hass.config_entries.async_unload_platforms(entry, SUPPORTED_DOMAINS)
 
 
 async def async_remove_config_entry_device(hass: HomeAssistant, entry: ConfigEntry, device: dr.DeviceEntry):
@@ -224,7 +218,7 @@ class XEntity(Entity):
         self._attr_translation_key = self._option.get('translation_key', conv.attr)
 
         via_device = None
-        if not isinstance(device, GatewayDevice):
+        if not isinstance(device, (GatewayDevice, WifiPanelDevice)):
             via_device = (DOMAIN, device.gateway.device.id)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, device.id)},

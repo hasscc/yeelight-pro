@@ -5,7 +5,8 @@
         "title": "Yeelight Pro",
         "description": "{tip}",
         "data": {
-          "host": "网关IP"
+          "host": "网关IP",
+          "pid": "类型"
         }
       }
     },

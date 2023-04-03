@@ -127,16 +127,19 @@ class EventConv(Converter):
     event: str = ''
 
     def decode(self, device: "XDevice", payload: dict, value: dict):
-        key, val = self.attr.split('.', 1)
+        key, val = self.attr, None
+        if '.' in self.attr:
+            key, val = self.attr.split('.', 1)
         if key in ['motion', 'contact']:
             payload.update({
                 key: val in ['true', 'open'],
                 **value,
             })
-        elif self.attr in ['panel.click', 'panel.hold', 'panel.release']:
+        elif self.attr in ['panel.click', 'panel.hold', 'panel.release', 'keyClick']:
             key = value.get('key', '')
+            cnt = value.get('count', 1)
             btn = f'button{key}'
-            typ = {1: 'single', 2: 'double'}.get(value.get('count'), val)
+            typ = {1: 'single', 2: 'double'}.get(cnt, val)
             if typ:
                 btn += f'_{typ}'
             payload.update({

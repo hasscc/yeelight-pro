@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from enum import IntEnum
 from .converters.base import *
@@ -82,18 +83,20 @@ class XDevice:
         if not (nid := node.get('id')):
             return None
         if dvc := gateway.devices.get(nid):
-            dvc.name = node.get('n', '')
+            if n := node.get('n'):
+                dvc.name = n
         else:
             dvc = XDevice(node)
             if dvc.nt in [NodeType.SCENE]:
-                await gateway.device.add_scene(node)
+                if isinstance(gateway.device, GatewayDevice):
+                    await gateway.device.add_scene(node)
                 return gateway.device
             elif dvc.type in DEVICE_TYPE_LIGHTS:
                 dvc = LightDevice(node)
             elif dvc.type in [DeviceType.SWITCH_PANEL]:
                 dvc = SwitchPanelDevice(node)
             elif dvc.type in [DeviceType.RELAY_DOUBLE]:
-                dvc = RelayDevice(node)
+                dvc = RelayDoubleDevice(node)
             elif dvc.type in [DeviceType.SWITCH_SENSOR]:
                 dvc = SwitchSensorDevice(node)
             elif dvc.type in [DeviceType.KNOB]:
@@ -108,7 +111,6 @@ class XDevice:
             if gateway.pid == 2:
                 await gateway.get_node(dvc.id, wait_result=False)
             await gateway.add_device(dvc)
-            _LOGGER.info('Setup device: %s', [type(dvc), node])
         return dvc
 
     @staticmethod
@@ -133,7 +135,9 @@ class XDevice:
         self.update(self.decode(data))
 
     async def event_fired(self, data: dict):
-        self.update(self.decode_event(data))
+        decoded = self.decode_event(data)
+        self.update(decoded)
+        _LOGGER.debug('Event fired: %s', [data, decoded])
 
     @property
     def gateway(self):
@@ -171,6 +175,7 @@ class XDevice:
                 continue
             if conv.attr in self.entities:
                 continue
+            await asyncio.sleep(1)  # wait for setup
             await gateway.setup_entity(domain, self, conv)
 
     def subscribe_attrs(self, conv: Converter):
@@ -194,8 +199,9 @@ class XDevice:
         return payload
 
     def decode_event(self, data: dict) -> dict:
+        """Decode device event for HA."""
         payload = {}
-        event = data.get('value')
+        event = data.get('value') or data.get('type')
         if conv := self.converters.get(event):
             value = data.get('params') or {}
             conv.decode(self, payload, value)
@@ -243,12 +249,13 @@ class XDevice:
     async def set_prop(self, **kwargs):
         if not self.gateway:
             return None
+        cmd = kwargs.pop('method', 'gateway_set.prop')
         node = {
             'id': self.id,
             'nt': self.nt,
             **kwargs,
         }
-        return await self.gateway.send('gateway_set.prop', nodes=[node])
+        return await self.gateway.send(cmd, nodes=[node])
 
 
 class GatewayDevice(XDevice):
@@ -342,6 +349,12 @@ class RelayDevice(SwitchPanelDevice):
         return self.prop_params.get(f'{index}-p')
 
 
+class RelayDoubleDevice(SwitchPanelDevice):
+    def setup_converters(self):
+        self.add_converter(PropBoolConv('switch1', 'switch', prop='1-p'))
+        self.add_converter(PropBoolConv('switch2', 'switch', prop='2-p'))
+
+
 class ActionDevice(XDevice):
     def setup_converters(self):
         super().setup_converters()
@@ -378,3 +391,24 @@ class ContactDevice(XDevice):
         self.add_converter(Converter('contact', 'binary_sensor'))
         self.add_converter(EventConv('contact.open'))
         self.add_converter(EventConv('contact.close'))
+
+
+class WifiPanelDevice(RelayDoubleDevice):
+    def __init__(self, node: dict):
+        super().__init__({
+            **node,
+            'type': 'wifi_panel',
+        })
+        self.name = 'Yeelight Wifi Panel'
+
+    async def set_prop(self, **kwargs):
+        kwargs['method'] = 'device_set.prop'
+        return await super().set_prop(**kwargs)
+
+    def entity_id(self, conv: Converter):
+        return f'{conv.domain}.yp_{self.id}_{conv.attr}'
+
+    def setup_converters(self):
+        super().setup_converters()
+        self.add_converter(Converter('action', 'sensor'))
+        self.add_converter(EventConv('keyClick'))

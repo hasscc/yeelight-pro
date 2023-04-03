@@ -1,14 +1,11 @@
 import asyncio
 import logging
-import socket
 import random
-import ifaddr
 import json
-import platform
-from ipaddress import IPv4Network
 from typing import Callable, Dict, Union, Optional
 
-from .device import XDevice, GatewayDevice
+from .const import *
+from .device import XDevice, GatewayDevice, WifiPanelDevice
 from .converters.base import Converter
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,7 +15,7 @@ MSG_SPLIT = b'\r\n'
 class ProGateway:
     host: str = None
     port: int = 65443
-    device: "GatewayDevice" = None
+    device: "XDevice" = None
 
     reader: Optional[asyncio.StreamReader] = None
     writer: Optional[asyncio.StreamWriter] = None
@@ -36,18 +33,21 @@ class ProGateway:
         self.log = options.get('logger', _LOGGER)
         self._msgs: Dict[Union[int, str], asyncio.Future] = {}
 
+        self.log.debug('Gateway: %s, pid: %s', host, self.pid)
+
     def add_setup(self, domain: str, handler):
         """Add hass entity setup function."""
         if '.' in domain:
             _, domain = domain.rsplit('.', 1)
         self.setups[domain] = handler
+        self.log.debug('Setup %s added for %s', domain, self.host)
 
     async def setup_entity(self, domain: str, device: "XDevice", conv: "Converter"):
         handler = self.setups.get(domain)
         if handler:
             handler(device, conv)
         else:
-            _LOGGER.warning('Setup %s not ready for %s', domain, [device, conv])
+            self.log.warning('Setup %s not ready for %s', domain, [device, conv])
 
     async def add_device(self, device: "XDevice"):
         if not device.hass:
@@ -56,6 +56,8 @@ class ProGateway:
             self.devices[device.id] = device
         if self not in device.gateways:
             device.gateways.append(self)
+
+        self.log.info('Setup device: %s', [device.unique_id, device.name, device])
 
         # don't setup device from second gateway
         if len(device.gateways) > 1:
@@ -91,11 +93,13 @@ class ProGateway:
         while True:
             try:
                 if not await self.connect():
-                    await asyncio.sleep(60)
+                    await asyncio.sleep(30)
                     continue
                 await self.readline()
+            except asyncio.CancelledError:
+                break
             except Exception as exc:
-                self.log.error('Main loop error: %s', [type(exc), exc])
+                self.log.error('Main loop error: %s', [type(exc), exc], exc_info=exc)
         self.log.debug('Stop main loop')
 
     async def connect(self):
@@ -159,10 +163,13 @@ class ProGateway:
         else:
             self.log.info('Gateway message: %s', [cid, dat])
 
-        if is_topology := cmd in ['gateway_post.topology', 'getway_post.topology']:
+        if is_topology := cmd in ['gateway_post.topology']:
             if not self.device:
                 self.device = GatewayDevice(self)
                 await self.add_device(self.device)
+
+        if not nodes and 'params' in dat:
+            nodes = [dat['params']]
 
         for node in nodes:
             if not (nid := node.get('id')):
@@ -170,7 +177,12 @@ class ProGateway:
             if is_topology:
                 # node list
                 await XDevice.from_node(self, node)
+            if cmd in ['getway_post.topology'] and not self.device:
+                # wifi full screen panel
+                self.device = WifiPanelDevice(node)
+                await self.add_device(self.device)
             if not (dvc := self.devices.get(nid)):
+                self.log.warning('Device not found: %s', node)
                 continue
             if cmd in ['gateway_post.prop', 'device_post.prop']:
                 # node prop
@@ -212,11 +224,11 @@ class ProGateway:
         return res
 
     async def topology(self, wait_result=False):
-        cmd = 'device_get.topology' if self.pid == 2 else 'gateway_get.topology'
+        cmd = 'device_get.topology' if self.pid == PID_WIFI_PANEL else 'gateway_get.topology'
         await self.send(cmd, wait_result=wait_result)
 
     async def get_node(self, nid=0, wait_result=True):
-        cmd = 'device_get.node' if self.pid == 2 else 'gateway_get.node'
+        cmd = 'device_get.node' if self.pid == PID_WIFI_PANEL else 'gateway_get.node'
         return await self.send(cmd, params={'id': nid}, wait_result=wait_result)
 
     async def get_room(self, rid=0, wait_result=True):
@@ -227,76 +239,3 @@ class ProGateway:
         if res:
             res = res.get('scenes', [])
         return res
-
-    @staticmethod
-    async def discovery():
-        pass
-
-
-class DiscoverProtocol(asyncio.DatagramProtocol):
-    transport = None
-
-    def __init__(self, loop):
-        self.loop = loop
-
-    def broadcast(self, port=1982):
-        for host in self.enum_all_broadcast():
-            self.transport.sendto(b'YEELIGHT_GATEWAY_CONTROLLER_DEVICE', (host, port))
-            _LOGGER.warning('broadcast: %s', host)
-
-    def connection_made(self, transport):
-        self.transport = transport
-        sock = transport.get_extra_info('socket')
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        self.broadcast()
-
-    def datagram_received(self, data, addr):
-        _LOGGER.warning('discovery: %s', [addr, data.decode()])
-
-    def error_received(self, exc):
-        _LOGGER.warning('Error received when discovery: %s', exc)
-
-    def connection_lost(self, exc):
-        _LOGGER.warning('Socket closed, stop the event loop')
-        self.loop.stop()
-
-    @staticmethod
-    def enum_all_broadcast():
-        nets = []
-        adapters = ifaddr.get_adapters()
-        for adapter in adapters:
-            for ip in adapter.ips:
-                if not ip.is_IPv4 or ip.network_prefix >= 32:
-                    continue
-                ipNet = IPv4Network(f"{ip.ip}/{ip.network_prefix}", strict=False)
-                if not ipNet.is_private or ipNet.is_loopback or ipNet.is_link_local:
-                    continue
-                nets.append(str(ipNet.broadcast_address))
-        return nets
-
-
-async def async_start(gtw: ProGateway):
-    await gtw.start()
-    await asyncio.sleep(1)
-    await gtw.topology()
-    await gtw.get_room()
-    res = await gtw.send('gateway_get.node', params={'id': 1687125}, wait_result=True)
-    print(res)
-
-    gtw.writer.write(b'YEELIGHT_GATEWAY_CONTROLLER_DEVICE')
-    await gtw.writer.drain()
-
-    print('discovery ...')
-    loop = asyncio.get_running_loop()
-    await loop.create_datagram_endpoint(
-        lambda: DiscoverProtocol(loop),
-        local_addr=('0.0.0.0', 65443),
-    )
-
-    await asyncio.sleep(5)
-
-if __name__ == '__main__':
-
-    gtw = ProGateway('127.0.0.1' if platform.system() == 'Darwin' else '192.168.26.150')
-    asyncio.run(async_start(gtw))

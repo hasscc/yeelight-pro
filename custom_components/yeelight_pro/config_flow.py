@@ -41,7 +41,10 @@ class YeelightProConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors['base'] = 'cannot_access'
         return self.async_show_form(
             step_id='user',
-            data_schema=vol.Schema(get_flow_schema(user_input)),
+            data_schema=vol.Schema({
+                **get_flow_schema(user_input),
+                vol.Required(CONF_PID, default=user_input.get(CONF_PID, PID_GATEWAY)): vol.In(GATEWAY_TYPES),
+            }),
             errors=errors,
             description_placeholders={'tip': self.context.pop('last_error', '')},
         )
