@@ -292,6 +292,8 @@ class LightDevice(XDevice):
             self.add_converter(ColorTempKelvin('color_temp', prop='ct', parent='light'))
         if ColorMode.RGB in self.color_modes:
             self.add_converter(ColorRgbConv('rgb_color', prop='c', parent='light'))
+        if self.type == DeviceType.LIGHT_WITH_ZOOM_CT:
+            self.add_converter(DurationConv('angel', 'number'))
 
     @property
     def color_modes(self):
