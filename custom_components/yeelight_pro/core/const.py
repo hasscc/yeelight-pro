@@ -11,6 +11,7 @@ SUPPORTED_DOMAINS = [
     'light',
     'number',
     'binary_sensor',
+    'cover',
 ]
 
 PID_GATEWAY = 1

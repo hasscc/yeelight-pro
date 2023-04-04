@@ -76,6 +76,10 @@ class XDevice:
     def add_converter(self, conv: Converter):
         self.converters[conv.attr] = conv
 
+    def add_converters(self, *args: Converter):
+        for conv in args:
+            self.add_converter(conv)
+
     @staticmethod
     async def from_node(gateway: "ProGateway", node: dict):
         if node.get('nt') not in [NodeType.MESH, NodeType.MRSH_GROUP, NodeType.SCENE]:
@@ -105,6 +109,8 @@ class XDevice:
                 dvc = MotionDevice(node)
             elif dvc.type in [DeviceType.MAGNET_SENSOR]:
                 dvc = ContactDevice(node)
+            elif dvc.type in [DeviceType.CURTAIN]:
+                dvc = CoverDevice(node)
             else:
                 _LOGGER.warning('Unsupported device: %s', node)
                 return None
@@ -393,6 +399,18 @@ class ContactDevice(XDevice):
         self.add_converter(Converter('contact', 'binary_sensor'))
         self.add_converter(EventConv('contact.open'))
         self.add_converter(EventConv('contact.close'))
+
+
+class CoverDevice(XDevice):
+    def setup_converters(self):
+        super().setup_converters()
+        self.add_converters(
+            Converter('motor', 'cover'),
+            PropConv('position', parent='motor', prop='tp'),
+            PropConv('current_position', parent='motor', prop='cp'),
+        )
+        if 'rs' in self.prop_params:
+            self.add_converter(PropBoolConv('reverse', 'switch', prop='rs'))
 
 
 class WifiPanelDevice(RelayDoubleDevice):
