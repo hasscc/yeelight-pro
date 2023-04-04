@@ -50,13 +50,10 @@ class XLightEntity(XEntity, LightEntity):
     def __init__(self, device: XDevice, conv: Converter, option=None):
         super().__init__(device, conv, option)
 
-        self._attr_supported_color_modes = {
-            ColorMode.ONOFF,
-        }
-        if device.converters.get(ATTR_TRANSITION):
-            self._attr_supported_features |= LightEntityFeature.TRANSITION
-        if device.converters.get(ATTR_BRIGHTNESS):
-            self._attr_supported_color_modes.add(ColorMode.BRIGHTNESS)
+        # https://developers.home-assistant.io/docs/core/entity/light/#color-modes
+        self._attr_supported_color_modes = set()
+        if device.converters.get(ATTR_RGB_COLOR):
+            self._attr_supported_color_modes.add(ColorMode.RGB)
         if cov := device.converters.get(ATTR_COLOR_TEMP):
             self._attr_supported_color_modes.add(ColorMode.COLOR_TEMP)
             if hasattr(cov, 'minm') and hasattr(cov, 'maxm'):
@@ -67,8 +64,15 @@ class XLightEntity(XEntity, LightEntity):
                 self._attr_max_mireds = int(1000000 / cov.mink)
                 self._attr_min_color_temp_kelvin = cov.mink
                 self._attr_max_color_temp_kelvin = cov.maxk
-        if device.converters.get(ATTR_RGB_COLOR):
-            self._attr_supported_color_modes.add(ColorMode.RGB)
+
+        if not self._attr_supported_color_modes:
+            if device.converters.get(ATTR_BRIGHTNESS):
+                self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
+            else:
+                self._attr_supported_color_modes = {ColorMode.ONOFF}
+
+        if device.converters.get(ATTR_TRANSITION):
+            self._attr_supported_features |= LightEntityFeature.TRANSITION
 
         self._target_attrs = {}
 
