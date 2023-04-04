@@ -318,17 +318,31 @@ class LightDevice(XDevice):
         return modes
 
 
-class SwitchPanelDevice(XDevice):
+class ActionDevice(XDevice):
+    def setup_converters(self):
+        super().setup_converters()
+        self.add_converter(Converter('action', 'sensor'))
+
+
+class SwitchSensorDevice(ActionDevice):
+    def setup_converters(self):
+        super().setup_converters()
+        self.add_converters(
+            EventConv('panel.click'),
+            EventConv('panel.hold'),
+            EventConv('panel.release'),
+        )
+
+
+class RelayDevice(XDevice):
     def setup_converters(self):
         super().setup_converters()
         switches = self.switches
         if len(switches) == 1:
-            self.add_converter(PropBoolConv('switch', 'switch', prop='1-sp'))
+            self.add_converter(PropBoolConv('switch', 'switch', prop='1-p'))
         else:
             for i, p in self.switches.items():
-                self.add_converter(PropBoolConv(f'switch{i}', 'switch', prop=f'{i}-sp'))
-        if '0-blp' in self.prop_params:
-            self.add_converter(PropBoolConv('backlight', 'light', prop='0-blp'))
+                self.add_converter(PropBoolConv(f'switch{i}', 'switch', prop=f'{i}-p'))
 
     @property
     def switches(self):
@@ -340,41 +354,33 @@ class SwitchPanelDevice(XDevice):
         return lst
 
     def switch_power(self, index=1):
-        return self.prop_params.get(f'{index}-sp')
-
-
-class RelayDevice(SwitchPanelDevice):
-    def setup_converters(self):
-        super().setup_converters()
-        switches = self.switches
-        if len(switches) == 1:
-            self.add_converter(PropBoolConv('switch', 'switch', prop='1-p'))
-        else:
-            for i, p in self.switches.items():
-                self.add_converter(PropBoolConv(f'switch{i}', 'switch', prop=f'{i}-p'))
-
-    def switch_power(self, index=1):
         return self.prop_params.get(f'{index}-p')
 
 
-class RelayDoubleDevice(SwitchPanelDevice):
-    def setup_converters(self):
-        self.add_converter(PropBoolConv('switch1', 'switch', prop='1-p'))
-        self.add_converter(PropBoolConv('switch2', 'switch', prop='2-p'))
-
-
-class ActionDevice(XDevice):
+class SwitchPanelDevice(RelayDevice, SwitchSensorDevice):
     def setup_converters(self):
         super().setup_converters()
-        self.add_converter(Converter('action', 'sensor'))
+        SwitchSensorDevice.setup_converters(self)
+
+        switches = self.switches
+        if len(switches) == 1:
+            self.add_converter(PropBoolConv('switch', 'switch', prop='1-sp'))
+        else:
+            for i, p in self.switches.items():
+                self.add_converter(PropBoolConv(f'switch{i}', 'switch', prop=f'{i}-sp'))
+        if '0-blp' in self.prop_params:
+            self.add_converter(PropBoolConv('backlight', 'light', prop='0-blp'))
+
+    def switch_power(self, index=1):
+        return self.prop_params.get(f'{index}-sp')
 
 
-class SwitchSensorDevice(ActionDevice):
+class RelayDoubleDevice(XDevice):
     def setup_converters(self):
-        super().setup_converters()
-        self.add_converter(EventConv('panel.click'))
-        self.add_converter(EventConv('panel.hold'))
-        self.add_converter(EventConv('panel.release'))
+        self.add_converters(
+            PropBoolConv('switch1', 'switch', prop='1-p'),
+            PropBoolConv('switch2', 'switch', prop='2-p')
+        )
 
 
 class KnobDevice(SwitchSensorDevice):
