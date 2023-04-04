@@ -137,9 +137,12 @@ class EventConv(Converter):
             })
         elif self.attr in ['panel.click', 'panel.hold', 'panel.release', 'keyClick']:
             key = value.get('key', '')
-            cnt = value.get('count', 1)
+            cnt = value.get('count', None)
             btn = f'button{key}'
-            typ = {1: 'single', 2: 'double'}.get(cnt, val)
+            if cnt is not None:
+                typ = {1: 'single', 2: 'double', 3: 'triple'}.get(cnt, val)
+            else:
+                typ = val
             if typ:
                 btn += f'_{typ}'
             payload.update({
