@@ -299,7 +299,7 @@ class LightDevice(XDevice):
         if ColorMode.RGB in self.color_modes:
             self.add_converter(ColorRgbConv('rgb_color', prop='c', parent='light'))
         if self.type == DeviceType.LIGHT_WITH_ZOOM_CT:
-            self.add_converter(DurationConv('angel', 'number'))
+            self.add_converter(PropConv('angel', 'number'))
 
     @property
     def color_modes(self):
@@ -411,7 +411,7 @@ class CoverDevice(XDevice):
     def setup_converters(self):
         super().setup_converters()
         self.add_converters(
-            Converter('motor', 'cover'),
+            MotorConv('motor', 'cover'),
             PropConv('position', parent='motor', prop='tp'),
             PropConv('current_position', parent='motor', prop='cp'),
         )

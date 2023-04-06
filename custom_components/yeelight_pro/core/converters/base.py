@@ -166,5 +166,24 @@ class EventConv(Converter):
 
 
 @dataclass
+class MotorConv(Converter):
+    readable: bool = False
+
+    def decode(self, device: "XDevice", payload: dict, value: Any):
+        if self.readable and value is not None:
+            payload[self.attr] = value
+
+    def encode(self, device: "XDevice", payload: dict, value: Any):
+        if value is not None:
+            super().encode(device, payload, {
+                'action': {
+                    'motorAdjust': {
+                        'type': value,
+                    },
+                },
+            })
+
+
+@dataclass
 class SceneConv(Converter):
     node: dict = None

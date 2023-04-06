@@ -60,13 +60,15 @@ class XCoverEntity(XEntity, CoverEntity, RestoreEntity):
             self.async_set_state({ATTR_POSITION: attrs[ATTR_CURRENT_POSITION]})
 
     async def async_open_cover(self, **kwargs):
-        await self.device_send_props({self._name: 'open'})
+        kwargs[ATTR_POSITION] = 100
+        await self.async_set_cover_position(**kwargs)
 
     async def async_close_cover(self, **kwargs):
-        await self.device_send_props({self._name: 'close'})
+        kwargs[ATTR_POSITION] = 0
+        await self.async_set_cover_position(**kwargs)
 
     async def async_stop_cover(self, **kwargs):
-        await self.device_send_props({self._name: 'stop'})
+        await self.device_send_props({self._name: 'pause'})
 
     async def async_set_cover_position(self, **kwargs):
         await self.device_send_props(kwargs)
