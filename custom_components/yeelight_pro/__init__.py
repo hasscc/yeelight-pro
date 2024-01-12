@@ -5,7 +5,11 @@ import datetime
 import voluptuous as vol
 
 from homeassistant.core import HomeAssistant, State, callback
-from homeassistant.const import *
+from homeassistant.const import (
+    CONF_HOST,
+    EVENT_HOMEASSISTANT_STOP,
+    SERVICE_RELOAD,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity import Entity, DeviceInfo
 from homeassistant.helpers.reload import (

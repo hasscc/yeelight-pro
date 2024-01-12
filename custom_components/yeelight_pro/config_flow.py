@@ -2,7 +2,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.const import *
+from homeassistant.const import CONF_HOST
 
 from . import get_gateway_from_config, init_integration_data
 from .core.const import *
