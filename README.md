@@ -11,7 +11,7 @@
 
 #### Method 3: Onkey shell via SSH / Terminal & SSH add-on
 ```shell
-wget -q -O - https://hacs.vip/get | HUB_DOMAIN=ghproxy.com/github.com DOMAIN=yeelight_pro REPO_PATH=hasscc/yeelight-pro ARCHIVE_TAG=main bash -
+wget -O - https://hacs.vip/get | DOMAIN=yeelight_pro bash -
 ```
 
 #### Method 4: shell_command service
@@ -19,8 +19,8 @@ wget -q -O - https://hacs.vip/get | HUB_DOMAIN=ghproxy.com/github.com DOMAIN=yee
     ```yaml
     shell_command:
       update_yeelight_pro: |-
-        wget -q -O - https://hacs.vip/get | HUB_DOMAIN=ghproxy.com/github.com DOMAIN=yeelight_pro REPO_PATH=hasscc/yeelight-pro ARCHIVE_TAG=main bash -
+        wget -O - https://hacs.vip/get | DOMAIN=yeelight_pro bash -
     ```
 2. Restart HA core
 3. Call this [`service: shell_command.update_yeelight_pro`](https://my.home-assistant.io/redirect/developer_call_service/?service=shell_command.update_yeelight_pro) in Developer Tools
-
+4. Restart HA core again
