@@ -152,7 +152,9 @@ class EventConv(Converter):
                 **value,
             })
         elif self.attr in ['knob.spin']:
-            for typ in ['free_spin', 'hold_spin']:
+            keys = ['free_spin', 'hold_spin']
+            keys += [ f"{i}-free_spin" for i in range(1,5)] # For E-Series Knob Support
+            for typ in keys:
                 if value.get(typ) in [None, 0]:
                     continue
                 payload.update({

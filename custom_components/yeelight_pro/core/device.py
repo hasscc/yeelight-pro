@@ -102,7 +102,8 @@ class XDevice:
             elif dvc.type in [DeviceType.RELAY_DOUBLE]:
                 dvc = RelayDoubleDevice(node)
             elif dvc.type in [DeviceType.SWITCH_SENSOR]:
-                dvc = SwitchSensorDevice(node)
+                # Add support for the E-Series Knob as its DeviceType ID is 128.
+                dvc = KnobDevice(node)                  
             elif dvc.type in [DeviceType.KNOB]:
                 dvc = KnobDevice(node)
             elif dvc.type in [DeviceType.MOTION_SENSOR, DeviceType.MOTION_WITH_LIGHT]:
