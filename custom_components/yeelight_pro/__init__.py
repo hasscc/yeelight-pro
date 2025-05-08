@@ -290,7 +290,6 @@ class XEntity(Entity):
             state: State = await self.async_get_last_state()
             if state:
                 self.async_restore_last_state(state.state, state.attributes)
-                return
 
         self.added = True
         await super().async_added_to_hass()
