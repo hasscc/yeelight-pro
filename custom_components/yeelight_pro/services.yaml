@@ -24,3 +24,19 @@ send_command:
       example: true
       selector:
         boolean:
+
+mock_incoming_message:
+  description: Send command to gateway
+  fields:
+    host:
+      description: Gateway host
+      example: 192.168.26.150
+      required: false
+      selector:
+        text:
+    message:
+      description: Mock message
+      example: '{"id": 8218, "method": "gateway_post.event", "nodes": [{"params": {}, "value": "motion.false", "id": 301809111, "nt": 2}]}'
+      required: true
+      selector:
+        text:

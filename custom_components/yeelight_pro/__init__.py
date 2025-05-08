@@ -1,4 +1,6 @@
 """The component."""
+import json
+import ast
 import logging
 import asyncio
 import datetime
@@ -161,6 +163,15 @@ class ComponentServices:
             }),
         )
 
+        hass.services.async_register(
+            DOMAIN, 'mock_incoming_message', self.async_mock_incoming_message,
+            schema=vol.Schema({
+                vol.Optional(CONF_HOST): cv.string,
+                vol.Required('message'): cv.string,
+            }),
+        )
+
+
     async def handle_reload_config(self, call):
         config = await async_integration_yaml_config(self.hass, DOMAIN)
         if not config or DOMAIN not in config:
@@ -202,7 +213,43 @@ class ComponentServices:
         })
         return rdt
 
+    async def async_mock_incoming_message(self, call):
+        dat = call.data or {}
+        gip = dat.get(CONF_HOST)
+        gtw = None
+        for g in self.hass.data[DOMAIN][CONF_GATEWAYS].values():
+            if not isinstance(g, ProGateway):
+                continue
+            if g.host == gip or not gip:
+                gtw = g
+                break
+        if not gtw:
+            _LOGGER.warning('Gateway %s not found.', gip)
+            return False
+        message = dat['message']
 
+        # 兼容python字典打印复制
+        try:
+            msg = json.loads(message)
+        except json.JSONDecodeError:
+            try:
+                msg = ast.literal_eval(message)
+            except (ValueError, SyntaxError):
+                msg = None
+                
+        if not isinstance(msg, dict):
+            title = 'Yeelight Pro mock incoming message'
+            err_info = f'❌ Format error: {message}\n\n'
+            err_info += '''✅JSON: {"id": 8218, "method": "gateway_post.event", "nodes": [{"params": {}, "value": "motion.false", "id": 301809111, "nt": 2}]}\n'''
+            err_info += '''✅PYTHON: {'id': 8218, 'method': 'gateway_post.event', 'nodes': [{'params': {}, 'value': 'motion.false', 'id': 301809111, 'nt': 2}]}\n'''
+            persistent_notification.async_create(
+                self.hass, err_info, title=title, notification_id=f'{DOMAIN}-debug',
+            )
+            return False
+        message = json.dumps(msg)
+        _LOGGER.info('Mock message: %s', message)
+        await gtw.on_message(message.encode('utf-8'))
+        
 class XEntity(Entity):
     added = False
     _attr_should_poll = False
