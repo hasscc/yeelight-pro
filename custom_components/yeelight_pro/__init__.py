@@ -90,13 +90,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
-    gtw = hass.data[DOMAIN][CONF_GATEWAYS].get(entry.entry_id)
-    if isinstance(gtw, ProGateway):
-        await gtw.stop()
-        hass.data[DOMAIN][CONF_GATEWAYS].pop(entry.entry_id)
-
-    return hass.config_entries.async_unload_platforms(entry, SUPPORTED_DOMAINS)
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, SUPPORTED_DOMAINS)
+    if unload_ok:
+        gtw = hass.data[DOMAIN][CONF_GATEWAYS].pop(entry.entry_id, None)
+        if gtw:
+            await gtw.stop()
+    return unload_ok
 
 
 async def async_remove_config_entry_device(hass: HomeAssistant, entry: ConfigEntry, device: dr.DeviceEntry):
