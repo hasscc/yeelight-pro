@@ -64,6 +64,8 @@ class XDevice:
         self.pid = node.get('pid')
         self.type = node.get('type', 0)
         self.name = node.get('n', '')
+        self.cids = node.get('cids')
+        self.ch_num = node.get('ch_num')
         self.prop = {}
         self.entities: Dict[str, "XEntity"] = {}
         self.gateways: List["ProGateway"] = []
@@ -394,10 +396,25 @@ class MotionDevice(XDevice):
     def setup_converters(self):
         super().setup_converters()
         self.add_converter(Converter('motion', 'binary_sensor'))
+        self.add_converters(PropBoolConv('motion', 'binary_sensor', prop="mv"))
         self.add_converter(EventConv('motion.true'))
         self.add_converter(EventConv('motion.false'))
         if self.type in [DeviceType.MOTION_WITH_LIGHT]:
             self.add_converter(PropConv('light', 'sensor', prop='level'))
+        
+        # This is a presence sensor with a built-in light sensor. Its type is still defined as 129,
+        # so we can only temporarily distinguish it by the `cids` value.
+        if 73 in self.cids:
+            # Regular presence sensors use cids = [9], while ceiling-mounted sensors with light detection use cids = [73].
+            self.add_converter(PropConv(
+                    attr='luminance',
+                    domain='sensor',
+                    prop='luminance',
+                    unit_of_measurement='lx',
+                    device_class='illuminance'
+            ))
+
+            # Currently, `approach.true` and `approach.false` seem to behave the same as `mv` (motion).
 
 
 class ContactDevice(XDevice):
