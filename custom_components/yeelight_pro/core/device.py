@@ -11,6 +11,14 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 from homeassistant.components.light import ColorMode
+from homeassistant.components.climate import (
+    FAN_LOW,
+    FAN_MEDIUM,
+    FAN_HIGH,
+)
+from homeassistant.components.climate.const import (
+    HVACMode,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -114,6 +122,8 @@ class XDevice:
                 dvc = ContactDevice(node)
             elif dvc.type in [DeviceType.CURTAIN]:
                 dvc = CoverDevice(node)
+            elif dvc.type in [DeviceType.AIR_CONDITIONER]:
+                dvc = ClimateDevice(node)
             else:
                 _LOGGER.warning('Unsupported device: %s', node)
                 return None
@@ -456,3 +466,27 @@ class WifiPanelDevice(RelayDoubleDevice):
         super().setup_converters()
         self.add_converter(Converter('action', 'sensor'))
         self.add_converter(EventConv('keyClick'))
+
+
+class ClimateDevice(XDevice):
+    def setup_converters(self):
+        super().setup_converters()
+        self.add_converter(Converter('climate', 'climate'))
+        self.add_converter(PropBoolConv('is_on', parent='climate', prop='1-acp'))
+        self.add_converter(PropConv('current_temperature', parent='climate', prop='1-acct'))
+        self.add_converter(PropConv('target_temperature', parent='climate', prop='1-actt'))
+        self.add_converter(PropMapConv('mode', parent='climate', prop='1-acm', map={
+            1: HVACMode.COOL,
+            2: HVACMode.DRY,
+            4: HVACMode.FAN_ONLY,
+            8: HVACMode.HEAT
+        }))
+        self.add_converter(PropMapConv('fan_mode', parent='climate', prop='1-acf', map={
+            1: FAN_HIGH,
+            2: FAN_MEDIUM,
+            4: FAN_LOW
+        }))
+        
+        # NYI
+        # acd: Air conditioner delay switch remaining time (unit: milliseconds)
+        # aco: Whether the air conditioner is online (air conditioner online status)
