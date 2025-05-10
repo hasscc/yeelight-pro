@@ -11,6 +11,14 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 from homeassistant.components.light import ColorMode
+from homeassistant.components.climate import (
+    FAN_LOW,
+    FAN_MEDIUM,
+    FAN_HIGH,
+)
+from homeassistant.components.climate.const import (
+    HVACMode,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,6 +72,8 @@ class XDevice:
         self.pid = node.get('pid')
         self.type = node.get('type', 0)
         self.name = node.get('n', '')
+        self.cids = node.get('cids')
+        self.ch_num = node.get('ch_num')
         self.prop = {}
         self.entities: Dict[str, "XEntity"] = {}
         self.gateways: List["ProGateway"] = []
@@ -112,6 +122,8 @@ class XDevice:
                 dvc = ContactDevice(node)
             elif dvc.type in [DeviceType.CURTAIN]:
                 dvc = CoverDevice(node)
+            elif dvc.type in [DeviceType.AIR_CONDITIONER]:
+                dvc = ClimateDevice(node)
             else:
                 _LOGGER.warning('Unsupported device: %s', node)
                 return None
@@ -394,10 +406,25 @@ class MotionDevice(XDevice):
     def setup_converters(self):
         super().setup_converters()
         self.add_converter(Converter('motion', 'binary_sensor'))
+        self.add_converters(PropBoolConv('motion', 'binary_sensor', prop="mv"))
         self.add_converter(EventConv('motion.true'))
         self.add_converter(EventConv('motion.false'))
         if self.type in [DeviceType.MOTION_WITH_LIGHT]:
             self.add_converter(PropConv('light', 'sensor', prop='level'))
+        
+        # This is a presence sensor with a built-in light sensor. Its type is still defined as 129,
+        # so we can only temporarily distinguish it by the `cids` value.
+        if 73 in self.cids:
+            # Regular presence sensors use cids = [9], while ceiling-mounted sensors with light detection use cids = [73].
+            self.add_converter(PropConv(
+                    attr='luminance',
+                    domain='sensor',
+                    prop='luminance',
+                    unit_of_measurement='lx',
+                    device_class='illuminance'
+            ))
+
+            # Currently, `approach.true` and `approach.false` seem to behave the same as `mv` (motion).
 
 
 class ContactDevice(XDevice):
@@ -439,3 +466,27 @@ class WifiPanelDevice(RelayDoubleDevice):
         super().setup_converters()
         self.add_converter(Converter('action', 'sensor'))
         self.add_converter(EventConv('keyClick'))
+
+
+class ClimateDevice(XDevice):
+    def setup_converters(self):
+        super().setup_converters()
+        self.add_converter(Converter('climate', 'climate'))
+        self.add_converter(PropBoolConv('is_on', parent='climate', prop='1-acp'))
+        self.add_converter(PropConv('current_temperature', parent='climate', prop='1-acct'))
+        self.add_converter(PropConv('target_temperature', parent='climate', prop='1-actt'))
+        self.add_converter(PropMapConv('mode', parent='climate', prop='1-acm', map={
+            1: HVACMode.COOL,
+            2: HVACMode.DRY,
+            4: HVACMode.FAN_ONLY,
+            8: HVACMode.HEAT
+        }))
+        self.add_converter(PropMapConv('fan_mode', parent='climate', prop='1-acf', map={
+            1: FAN_HIGH,
+            2: FAN_MEDIUM,
+            4: FAN_LOW
+        }))
+        
+        # NYI
+        # acd: Air conditioner delay switch remaining time (unit: milliseconds)
+        # aco: Whether the air conditioner is online (air conditioner online status)

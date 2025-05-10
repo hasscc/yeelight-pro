@@ -9,6 +9,8 @@ if TYPE_CHECKING:
 class Converter:
     attr: str  # hass attribute
     domain: Optional[str] = None  # hass domain
+    unit_of_measurement: Optional[str] = None  # unit, e.g., 'lx'
+    device_class: Optional[str] = None  # device class, e.g., 'illuminance'
 
     prop: Optional[str] = None
     parent: Optional[str] = None
