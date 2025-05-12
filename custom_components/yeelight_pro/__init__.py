@@ -18,6 +18,7 @@ from homeassistant.helpers.reload import (
     async_integration_yaml_config,
     async_reload_integration_platforms,
 )
+from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.components import persistent_notification
 import homeassistant.helpers.device_registry as dr
 import homeassistant.helpers.config_validation as cv
@@ -149,8 +150,8 @@ class ComponentServices:
     def __init__(self, hass: HomeAssistant):
         self.hass = hass
 
-        hass.helpers.service.async_register_admin_service(
-            DOMAIN, SERVICE_RELOAD, self.handle_reload_config,
+        async_register_admin_service(
+            self.hass, DOMAIN, SERVICE_RELOAD, self.handle_reload_config,
         )
 
         hass.services.async_register(
