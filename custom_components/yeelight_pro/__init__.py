@@ -21,6 +21,8 @@ from homeassistant.helpers.reload import (
 from homeassistant.components import persistent_notification
 import homeassistant.helpers.device_registry as dr
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.service import async_register_admin_service
+
 
 from .core.const import *
 from .core.gateway import ProGateway
@@ -149,8 +151,8 @@ class ComponentServices:
     def __init__(self, hass: HomeAssistant):
         self.hass = hass
 
-        hass.helpers.service.async_register_admin_service(
-            DOMAIN, SERVICE_RELOAD, self.handle_reload_config,
+        async_register_admin_service(
+            hass, DOMAIN, SERVICE_RELOAD, self.handle_reload_config,
         )
 
         hass.services.async_register(
@@ -264,7 +266,8 @@ class XEntity(Entity):
         self.entity_id = device.entity_id(conv)
         self._attr_icon = self._option.get('icon')
         self._attr_entity_picture = self._option.get('picture')
-        self._attr_device_class = self._option.get('class')
+        self._attr_device_class = self._option.get('class') or conv.device_class
+        self._attr_native_unit_of_measurement = conv.unit_of_measurement
         self._attr_entity_category = self._option.get('category')
         self._attr_translation_key = self._option.get('translation_key', conv.attr)
 
