@@ -5,7 +5,13 @@ from homeassistant.core import callback
 from homeassistant.const import CONF_HOST
 
 from . import get_gateway_from_config, init_integration_data
-from .core.const import *
+from .core.const import (
+    DOMAIN,
+    DEFAULT_NAME,
+    CONF_PID,
+    PID_GATEWAY,
+    GATEWAY_TYPES,
+)
 
 
 def get_flow_schema(defaults: dict):
@@ -78,5 +84,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id='init',
             data_schema=vol.Schema(get_flow_schema(user_input)),
-            description_placeholders={'tip': self.context.pop('last_error', '')},
+            errors=errors,  # ← вот этого не хватало
+            description_placeholders={
+                'tip': self.context.pop('last_error', ''),
+            },
         )

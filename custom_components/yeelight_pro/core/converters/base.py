@@ -48,8 +48,14 @@ class MapConv(Converter):
         payload[self.attr] = self.map.get(value)
 
     def encode(self, device: "XDevice", payload: dict, value: Any):
-        value = next(k for k, v in self.map.items() if v == value)
-        super().encode(device, payload, value)
+        # safe reverse lookup
+        try:
+            raw = next(k for k, v in self.map.items() if v == value)
+        except StopIteration:
+            # if HA passed the raw key already, keep it; otherwise ignore
+            raw = value if value in self.map else None
+        if raw is not None:
+            super().encode(device, payload, raw)
 
 
 @dataclass
@@ -84,44 +90,62 @@ class PropMapConv(MapConv, PropConv):
 class BrightnessConv(PropConv):
     max: float = 100.0
 
-    def decode(self, device: "XDevice", payload: dict, value: int):
-        payload[self.attr] = round(value / self.max * 255.0)
+    def decode(self, device, payload, value: int):
+        try:
+            v = max(0, min(int(self.max), int(value)))
+        except Exception:
+            v = 0
+        payload[self.attr] = round(v / float(self.max) * 255)
 
-    def encode(self, device: "XDevice", payload: dict, value: float):
-        value = round(value / 255.0 * self.max)
-        super().encode(device, payload, int(value))
+    def encode(self, device, payload, value: float):
+        try:
+            v = max(0, min(255, int(value)))
+        except Exception:
+            v = 0
+        dev_v = round(v / 255.0 * float(self.max))
+        super().encode(device, payload, int(dev_v))
 
 
 @dataclass
 class ColorTempKelvin(PropConv):
-    # 2700..6500 => 370..153
     mink: int = 2700
     maxk: int = 6500
 
     def decode(self, device: "XDevice", payload: dict, value: int):
-        """Convert degrees kelvin to mired shift."""
-        payload[self.attr] = int(1000000.0 / value)
-        payload['color_temp_kelvin'] = value
+        k = int(value)
+        payload[self.attr] = int(1_000_000 / max(1, k))   # mired for HA
+        payload["color_temp_kelvin"] = k
 
-    def encode(self, device: "XDevice", payload: dict, value: int):
-        value = int(1000000.0 / value)
-        if value < self.mink:
-            value = self.mink
-        if value > self.maxk:
-            value = self.maxk
-        super().encode(device, payload, value)
+    def encode(self, device, payload, value: int):
+        """Accept mired or kelvin and send Kelvin to device."""
+        try:
+            v = int(value)
+        except Exception:
+            return
+        if v <= 1000:  # likely mired from HA
+            k = int(1_000_000 / max(1, v))
+        else:          # likely Kelvin (e.g., your prestage service)
+            k = v
+        k = max(self.mink, min(self.maxk, k))
+        super().encode(device, payload, k)  # send Kelvin
 
 
 class ColorRgbConv(PropConv):
-    def decode(self, device: "XDevice", payload: dict, value: int):
-        red = (value >> 16) & 0xFF
-        green = (value >> 8) & 0xFF
-        blue = value & 0xFF
-        payload[self.attr] = (red, green, blue)
+    def decode(self, device, payload, value: int):
+        r = (value >> 16) & 0xFF
+        g = (value >> 8) & 0xFF
+        b = value & 0xFF
+        payload[self.attr] = (r, g, b)
 
-    def encode(self, device: "XDevice", payload: dict, value: tuple):
-        value = (value[0] << 16) | (value[1] << 8) | value[2]
-        super().encode(device, payload, value)
+    def encode(self, device, payload, value: tuple):
+        try:
+            r, g, b = (int(value[0]), int(value[1]), int(value[2]))
+        except Exception:
+            r = g = b = 0
+        r = max(0, min(255, r))
+        g = max(0, min(255, g))
+        b = max(0, min(255, b))
+        super().encode(device, payload, (r << 16) | (g << 8) | b)
 
 
 @dataclass

@@ -1,1 +1,10 @@
+### macOS ###
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
+
 __pycache__/
+.ruff_cache
+.venv
+.vscode

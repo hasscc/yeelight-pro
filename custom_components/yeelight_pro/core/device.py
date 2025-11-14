@@ -1,9 +1,21 @@
 import asyncio
 import logging
 from enum import IntEnum
-from .converters.base import *
-
 from typing import Dict, List, TYPE_CHECKING
+
+from .converters.base import (
+    Converter,
+    PropConv,
+    PropBoolConv,
+    PropMapConv,
+    DurationConv,
+    BrightnessConv,
+    ColorTempKelvin,
+    ColorRgbConv,
+    EventConv,
+    MotorConv,
+    SceneConv,
+)
 
 if TYPE_CHECKING:
     from .. import XEntity
@@ -134,12 +146,12 @@ class XDevice:
 
     @staticmethod
     async def from_nodes(gateway: "ProGateway", nodes: List[dict]):
-        dls = []
+        res = []
         for node in nodes:
-            if (dvc := XDevice.from_node(gateway, node)) is None:
-                continue
-            dls.append(dvc)
-        return dls
+            dvc = await XDevice.from_node(gateway, node)   # ← await
+            if dvc is not None:
+                res.append(dvc)
+        return res
 
     async def prop_changed(self, data: dict):
         has_new = False
@@ -184,18 +196,16 @@ class XDevice:
         return f'{conv.domain}.yp{self.unique_id}_{conv.attr}'
 
     async def setup_entities(self):
-        if not (gateway := self.gateway):
+        gateway = self.gateway
+        if not gateway:
             return
         if not self.converters:
             _LOGGER.warning('Device has none converters: %s', [type(self), self.id])
         for conv in self.converters.values():
-            domain = conv.domain
-            if domain is None:
+            if not conv.domain or conv.attr in self.entities:
                 continue
-            if conv.attr in self.entities:
-                continue
-            await asyncio.sleep(1)  # wait for setup
-            await gateway.setup_entity(domain, self, conv)
+            # schedule without blocking
+            self.hass.async_create_task(gateway.setup_entity(conv.domain, self, conv))
 
     def subscribe_attrs(self, conv: Converter):
         attrs = {conv.attr}
@@ -405,7 +415,6 @@ class KnobDevice(SwitchSensorDevice):
 class MotionDevice(XDevice):
     def setup_converters(self):
         super().setup_converters()
-        self.add_converter(Converter('motion', 'binary_sensor'))
         self.add_converters(PropBoolConv('motion', 'binary_sensor', prop="mv"))
         self.add_converter(EventConv('motion.true'))
         self.add_converter(EventConv('motion.false'))

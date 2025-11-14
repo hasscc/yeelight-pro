@@ -10,16 +10,7 @@ from homeassistant.components.climate import (
     FAN_MEDIUM,
     FAN_HIGH,
 )
-from homeassistant.components.climate.const import (
-    ATTR_CURRENT_HUMIDITY,
-    ATTR_CURRENT_TEMPERATURE,
-    ATTR_HVAC_MODE,
-    ATTR_FAN_MODE,
-    DEFAULT_MAX_HUMIDITY,
-    DEFAULT_MIN_HUMIDITY,
-    HVACAction,
-    HVACMode,
-)
+from homeassistant.components.climate.const import HVACMode
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import (
@@ -92,18 +83,17 @@ class XClimateEntity(XEntity, ClimateEntity, RestoreEntity):
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
-        kwargs['target_temperature'] = kwargs['temperature']
-        await self.device_send_props(kwargs)
+        t = kwargs.get("temperature")
+        if t is None:
+            return
+        await self.device_send_props({"target_temperature": t})
 
     async def async_set_hvac_mode(self, hvac_mode, **kwargs):
         """Set new target hvac mode."""
-        if HVACMode.OFF == hvac_mode:
-            kwargs['is_on'] = False
+        if hvac_mode == HVACMode.OFF:
+            await self.device_send_props({"is_on": False})
         else:
-            kwargs['is_on'] = True
-            kwargs['mode'] = hvac_mode
-
-        await self.device_send_props(kwargs)
+            await self.device_send_props({"is_on": True, "mode": hvac_mode})
     
     async def async_set_fan_mode(self, fan_mode, **kwargs):
         """Set new target fan mode."""

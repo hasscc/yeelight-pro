@@ -4,7 +4,7 @@ import random
 import json
 from typing import Callable, Dict, Union, Optional
 
-from .const import *
+from .const import PID_WIFI_PANEL
 from .device import XDevice, GatewayDevice, WifiPanelDevice
 from .converters.base import Converter
 
@@ -57,7 +57,7 @@ class ProGateway:
         if self not in device.gateways:
             device.gateways.append(self)
 
-        self.log.info('Setup device: %s', [device.unique_id, device.name, device])
+        self.log.debug('Setup device: %s', [device.unique_id, device.name, device])
 
         # don't setup device from second gateway
         if len(device.gateways) > 1:
@@ -83,8 +83,14 @@ class ProGateway:
     async def stop(self, *args):
         if self.main_task and not self.main_task.cancelled():
             self.main_task.cancel()
-
-        for device in self.devices.values():
+        if self.writer:
+            try:
+                self.writer.close()
+                await self.writer.wait_closed()
+            except Exception:
+                pass
+            self.writer = None 
+        for device in list(self.devices.values()):
             if self in device.gateways:
                 device.gateways.remove(self)
 
@@ -130,72 +136,83 @@ class ProGateway:
         return None
 
     async def readline(self):
-        msg = b''
+        buffer = b""
         while True:
             try:
-                buf = await self.reader.readline()
+                chunk = await self.reader.readline()
+                if not chunk:
+                    # connection closed by peer
+                    return b""
+                buffer += chunk
+                if buffer.endswith(MSG_SPLIT):  # b"\r\n"
+                    msg = buffer[:-len(MSG_SPLIT)]
+                    await self.on_message(msg)
+                    return msg
             except (ConnectionError, BrokenPipeError, Exception) as exc:
-                buf = None
-                if isinstance(exc, (ConnectionError, BrokenPipeError)):
-                    try:
+                # hard disconnect: close writer and return so run_forever() can reconnect
+                try:
+                    if self.writer:
                         self.writer.close()
                         await self.writer.wait_closed()
-                    except (BrokenPipeError, Exception) as ce:
-                        self.log.error('Connection close error: %s', [type(ce), ce])
-                    self.writer = None
-                self.log.error('Readline error: %s', [type(exc), exc])
-                await asyncio.sleep(self.timeout - 0.1)
-            if not buf:
-                break
-            msg += buf
-            if buf[-2:] == MSG_SPLIT:
-                await self.on_message(msg)
-                break
-        return msg
+                except Exception:
+                    pass
+                self.writer = None
+                self.log.error("Readline error: %s", [type(exc), exc])
+                await asyncio.sleep(max(0.1, self.timeout - 0.1))
+                return b""
 
     async def on_message(self, msg):
-        dat = json.loads(msg.decode()) or {}
-        cmd = dat.get('method')
-        cid = cmd if cmd == 'gateway_post.topology' else dat.get('id')
-        nodes = dat.get('nodes') or []
+        try:
+            dat = json.loads(msg.decode()) or {}
+        except Exception as exc:
+            self.log.error("JSON decode error: %s; raw=%r", exc, msg[:200])
+            return
+
+        cmd = dat.get("method")
+        # consider both gateway and device topology posts
+        cid = cmd if cmd in ("gateway_post.topology", "device_post.topology") else dat.get("id")
+        nodes = dat.get("nodes") or []
+
         if ack := self._msgs.get(cid):
             ack.set_result(dat)
         else:
-            self.log.info('Gateway message: %s', [cid, dat])
+            self.log.debug("Gateway message: %s", [cid, dat])
 
-        if is_topology := cmd in ['gateway_post.topology']:
-            if not self.device:
+        is_topology = cmd in ("gateway_post.topology", "device_post.topology")
+
+        if is_topology and not self.device:
+            if self.pid == PID_WIFI_PANEL and nodes:
+                self.device = WifiPanelDevice(nodes[0])   # pass the first node
+            else:
                 self.device = GatewayDevice(self)
-                await self.add_device(self.device)
+            await self.add_device(self.device)
 
-        if not nodes and 'params' in dat:
-            nodes = [dat['params']]
+        if not nodes and "params" in dat:
+            nodes = [dat["params"]]
 
         for node in nodes:
-            if not (nid := node.get('id')):
+            nid = node.get("id")
+            if not nid:
                 continue
             if is_topology:
-                # node list
                 await XDevice.from_node(self, node)
-            if cmd in ['getway_post.topology'] and not self.device:
-                # wifi full screen panel
-                self.device = WifiPanelDevice(node)
-                await self.add_device(self.device)
-            if not (dvc := self.devices.get(nid)):
-                self.log.warning('Device not found: %s', node)
+            # (the old check `if cmd == 'gateway_post.topology' and not self.device` becomes redundant)
+
+            dvc = self.devices.get(nid)
+            if not dvc:
+                self.log.warning("Device not found: %s", node)
                 continue
-            if cmd in ['gateway_post.prop', 'device_post.prop']:
-                # node prop
+
+            if cmd in ("gateway_post.prop", "device_post.prop"):
                 await dvc.prop_changed(node)
-            if cmd in ['gateway_post.event', 'device_post.event']:
-                # node event
+            elif cmd in ("gateway_post.event", "device_post.event"):
                 await dvc.event_fired(node)
 
     async def send(self, method, wait_result=True, **kwargs):
         if not self.writer:
             await self.connect()
-        if method == 'gateway_get.topology':
-            cid = 'gateway_post.topology'
+        if method in ("gateway_get.topology", "device_get.topology"):
+            cid = method.replace("_get.", "_post.")
         else:
             cid = random.randint(1_000_000_000, 2_147_483_647)
         fut = None
@@ -208,7 +225,7 @@ class ProGateway:
             'method': method,
             **kwargs,
         }
-        self.log.info('Send command: %s', dat)
+        self.log.debug('Send command: %s', dat)
         self.writer.write(json.dumps(dat).encode() + MSG_SPLIT)
         await self.writer.drain()
 

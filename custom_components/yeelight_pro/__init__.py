@@ -7,6 +7,7 @@ import datetime
 import voluptuous as vol
 
 from homeassistant.core import HomeAssistant, State, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.const import (
     CONF_HOST,
     EVENT_HOMEASSISTANT_STOP,
@@ -23,8 +24,12 @@ import homeassistant.helpers.device_registry as dr
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.service import async_register_admin_service
 
-
-from .core.const import *
+from .core.const import (
+    DOMAIN,
+    DEFAULT_NAME,
+    CONF_GATEWAYS,
+    SUPPORTED_DOMAINS,
+)
 from .core.gateway import ProGateway
 from .core.device import XDevice, GatewayDevice, WifiPanelDevice
 from .core.converters.base import Converter
@@ -87,10 +92,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     if gtw := await get_gateway_from_config(hass, entry):
         await gtw.start()
-
-    entry.async_on_unload(
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, gtw.stop)
-    )
+        entry.async_on_unload(
+            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, gtw.stop)
+        )
     return True
 
 
@@ -160,8 +164,9 @@ class ComponentServices:
             schema=vol.Schema({
                 vol.Required(CONF_HOST): cv.string,
                 vol.Required('method'): cv.string,
-                vol.Optional('params', default=None): vol.Any(dict, None),
-                vol.Optional('throw', default=False): cv.boolean,
+                vol.Optional('params', default={}): dict,
+                vol.Optional('result'): object,
+                vol.Optional('throw', default=True): cv.boolean,
             }),
         )
 
@@ -188,31 +193,51 @@ class ComponentServices:
         await async_reload_integration_platforms(self.hass, DOMAIN, SUPPORTED_DOMAINS)
 
     async def async_send_command(self, call):
-        dat = call.data or {}
+        dat = call.data
         gip = dat.get(CONF_HOST)
-        gtw = None
+
+        gtw: ProGateway | None = None
         for g in self.hass.data[DOMAIN][CONF_GATEWAYS].values():
-            if not isinstance(gtw, ProGateway):
+            # ✅ фикс: проверяем g, а не gtw
+            if not isinstance(g, ProGateway):
                 continue
-            if g.host == gip or not gip:
+            if not gip or g.host == gip:
                 gtw = g
                 break
+
         if not gtw:
-            _LOGGER.warning('Gateway %s not found.', gip)
-            return False
-        method = dat['method']
-        params = dat.get('params')
-        rdt = await gtw.send(method, params=params, wait_result=True)
-        if dat.get('throw', True):
+            _LOGGER.warning("Gateway %s not found.", gip)
+            return
+
+        method = dat.get("method") or "gateway_post.event"
+        params = dat.get("params") or {}
+        rdt = dat.get("result")
+
+        try:
+            ret = await gtw.send(method, params, True)
+        except Exception as err:  # noqa: BLE001
+            rdt = repr(err)
+        else:
+            if not rdt:
+                rdt = ret
+
+        if dat.get("throw", True):
             persistent_notification.async_create(
-                self.hass, f'{rdt}', 'Yeelight Pro command result', f'{DOMAIN}-debug',
+                self.hass,
+                f"{rdt}",
+                "Yeelight Pro command result",
+                f"{DOMAIN}-debug",
             )
-        self.hass.bus.async_fire(f'{DOMAIN}.send_command', {
-            'host': gip,
-            'method': method,
-            'params': params,
-            'result': rdt,
-        })
+
+        self.hass.bus.async_fire(
+            f"{DOMAIN}.send_command",
+            {
+                "host": gip,
+                "method": method,
+                "params": params,
+                "result": rdt,
+            },
+        )
         return rdt
 
     async def async_mock_incoming_message(self, call):
@@ -262,8 +287,10 @@ class XEntity(Entity):
         self._name = conv.attr
         self._option = option or {}
         self._attr_name = f'{device.name} {conv.attr}'.strip()
-        self._attr_unique_id = f'{device.id}-{conv.attr}'
-        self.entity_id = device.entity_id(conv)
+        # Build a gateway-scoped unique_id to avoid collisions across multiple gateways
+        host_or_entry = getattr(device.gateway, "entry_id", None) or getattr(device.gateway, "host", "gw")
+        self._attr_unique_id = f"{host_or_entry}-{device.id}-{self._name}"
+        self._attr_has_entity_name = True
         self._attr_icon = self._option.get('icon')
         self._attr_entity_picture = self._option.get('picture')
         self._attr_device_class = self._option.get('class') or conv.device_class
@@ -273,9 +300,10 @@ class XEntity(Entity):
 
         via_device = None
         if not isinstance(device, (GatewayDevice, WifiPanelDevice)):
-            via_device = (DOMAIN, device.gateway.device.id)
+            via_device = (DOMAIN, f"{host_or_entry}-{device.gateway.device.id}")
+
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, device.id)},
+            identifiers={(DOMAIN, f"{host_or_entry}-{device.id}")},
             name=device.name,
             model=device.pid or device.type or '',
             via_device=via_device,
@@ -288,9 +316,20 @@ class XEntity(Entity):
         device.entities[conv.attr] = self
 
     async def async_added_to_hass(self):
-        """Run when entity about to be added to hass."""
+        # Migrate old unique_id "{device.id}-{attr}" -> new "{host}-{device.id}-{attr}"
+        try:
+            reg = er.async_get(self.hass)
+            old_uid = f"{self.device.id}-{self._name}"
+            new_uid = self.unique_id  # set from __init__
+            if old_uid != new_uid:
+                ent_id = reg.async_get_entity_id(self.platform.domain, DOMAIN, old_uid)
+                if ent_id:
+                    reg.async_update_entity(ent_id, new_unique_id=new_uid)
+        except Exception:
+            _LOGGER.debug("Unique ID migration skipped", exc_info=True)
+
         if hasattr(self, 'async_get_last_state'):
-            state: State = await self.async_get_last_state()
+            state = await self.async_get_last_state()
             if state:
                 self.async_restore_last_state(state.state, state.attributes)
 
@@ -311,7 +350,7 @@ class XEntity(Entity):
             if k not in data:
                 continue
             self._attr_extra_state_attributes[k] = data[k]
-        _LOGGER.info('%s: State changed: %s', self.entity_id, data)
+        _LOGGER.debug('%s: State changed: %s', self.entity_id, data)
 
     async def device_send_props(self, value: dict):
         payload = self.device.encode(value)
