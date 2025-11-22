@@ -4,9 +4,8 @@ import logging
 from homeassistant.core import callback
 from homeassistant.components.cover import (
     CoverEntity,
+    CoverState,
     DOMAIN as ENTITY_DOMAIN,
-    STATE_OPENING,
-    STATE_CLOSING,
     ATTR_POSITION,
     ATTR_CURRENT_POSITION,
 )
@@ -46,8 +45,8 @@ class XCoverEntity(XEntity, CoverEntity, RestoreEntity):
     def async_set_state(self, data: dict):
         if 'run_state' in data:
             self._attr_state = data['run_state']
-            self._attr_is_opening = self._attr_state == STATE_OPENING
-            self._attr_is_closing = self._attr_state == STATE_CLOSING
+            self._attr_is_opening = self._attr_state == CoverState.OPENING
+            self._attr_is_closing = self._attr_state == CoverState.CLOSING
         if ATTR_POSITION in data:
             self._attr_current_cover_position = data[ATTR_POSITION]
             self._attr_is_closed = self._attr_current_cover_position <= 3

@@ -59,11 +59,15 @@ class DurationConv(Converter):
     step: float = 1
     readable: bool = True
 
-    def decode(self, device: "XDevice", payload: dict, value: Union[int, float, str, None]):
+    def decode(
+        self, device: "XDevice", payload: dict, value: Union[int, float, str, None]
+    ):
         if self.readable and value is not None:
             payload[self.attr] = int(float(value) / 1000)
 
-    def encode(self, device: "XDevice", payload: dict, value: Union[int, float, str, None]):
+    def encode(
+        self, device: "XDevice", payload: dict, value: Union[int, float, str, None]
+    ):
         if value is not None:
             super().encode(device, payload, int(float(value) * 1000))
 
@@ -94,14 +98,14 @@ class BrightnessConv(PropConv):
 
 @dataclass
 class ColorTempKelvin(PropConv):
-    # 2700..6500 => 370..153
-    mink: int = 2700
+    # 1600..6500 => 370..153
+    mink: int = 1600
     maxk: int = 6500
 
     def decode(self, device: "XDevice", payload: dict, value: int):
         """Convert degrees kelvin to mired shift."""
         payload[self.attr] = int(1000000.0 / value)
-        payload['color_temp_kelvin'] = value
+        payload["color_temp_kelvin"] = value
 
     def encode(self, device: "XDevice", payload: dict, value: int):
         value = int(1000000.0 / value)
@@ -126,44 +130,50 @@ class ColorRgbConv(PropConv):
 
 @dataclass
 class EventConv(Converter):
-    event: str = ''
+    event: str = ""
 
     def decode(self, device: "XDevice", payload: dict, value: dict):
         key, val = self.attr, None
-        if '.' in self.attr:
-            key, val = self.attr.split('.', 1)
-        if key in ['motion', 'contact']:
-            payload.update({
-                key: val in ['true', 'open'],
-                **value,
-            })
-        elif self.attr in ['panel.click', 'panel.hold', 'panel.release', 'keyClick']:
-            key = value.get('key', '')
-            cnt = value.get('count', None)
-            btn = f'button{key}'
+        if "." in self.attr:
+            key, val = self.attr.split(".", 1)
+        if key in ["motion", "contact"]:
+            payload.update(
+                {
+                    key: val in ["true", "open"],
+                    **value,
+                }
+            )
+        elif self.attr in ["panel.click", "panel.hold", "panel.release", "keyClick"]:
+            key = value.get("key", "")
+            cnt = value.get("count", None)
+            btn = f"button{key}"
             if cnt is not None:
-                typ = {1: 'single', 2: 'double', 3: 'triple'}.get(cnt, val)
+                typ = {1: "single", 2: "double", 3: "triple"}.get(cnt, val)
             else:
                 typ = val
             if typ:
-                btn += f'_{typ}'
-            payload.update({
-                'action': btn,
-                'event': self.attr,
-                'button': key,
-                **value,
-            })
-        elif self.attr in ['knob.spin']:
-            keys = ['free_spin', 'hold_spin']
-            keys += [ f"{i}-free_spin" for i in range(1,5)] # For E-Series Knob Support
+                btn += f"_{typ}"
+            payload.update(
+                {
+                    "action": btn,
+                    "event": self.attr,
+                    "button": key,
+                    **value,
+                }
+            )
+        elif self.attr in ["knob.spin"]:
+            keys = ["free_spin", "hold_spin"]
+            keys += [f"{i}-free_spin" for i in range(1, 5)]  # For E-Series Knob Support
             for typ in keys:
                 if value.get(typ) in [None, 0]:
                     continue
-                payload.update({
-                    'action': typ,
-                    'event': self.attr,
-                    **value,
-                })
+                payload.update(
+                    {
+                        "action": typ,
+                        "event": self.attr,
+                        **value,
+                    }
+                )
 
     def encode(self, device: "XDevice", payload: dict, value: dict):
         super().encode(device, payload, value)
@@ -179,13 +189,17 @@ class MotorConv(Converter):
 
     def encode(self, device: "XDevice", payload: dict, value: Any):
         if value is not None:
-            super().encode(device, payload, {
-                'action': {
-                    'motorAdjust': {
-                        'type': value,
+            super().encode(
+                device,
+                payload,
+                {
+                    "action": {
+                        "motorAdjust": {
+                            "type": value,
+                        },
                     },
                 },
-            })
+            )
 
 
 @dataclass
