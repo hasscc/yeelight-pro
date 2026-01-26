@@ -23,12 +23,31 @@
         "title": "Yeelight Pro",
         "description": "{tip}",
         "data": {
-          "host": "Host"
+          "host": "Host",
+          "keepalive": "Keepalive interval (seconds)"
         }
       }
     },
     "error": {
       "cannot_access": "Can't access the gateway"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connection": {
+        "name": "Connection"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
+      }
+    }
+  },
+  "services": {
+    "remove_stale_devices": {
+      "name": "Remove stale devices",
+      "description": "Remove devices that are no longer present in the gateway topology"
     }
   }
 }

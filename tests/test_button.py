@@ -41,6 +41,7 @@ class FakeDevice:
         self.type = "type"
         self.firmware_version = "1.0"
         self.entities = {}
+        self.online = True
 
     def subscribe_attrs(self, conv):
         # кнопки обычно не подписываются ни на что, но XEntity требует set()

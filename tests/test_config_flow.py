@@ -1,6 +1,6 @@
 import pytest
 
-from homeassistant import config_entries, data_entry_flow
+from homeassistant import data_entry_flow
 from homeassistant.const import CONF_HOST
 
 from custom_components.yeelight_pro.config_flow import (
@@ -255,10 +255,10 @@ async def test_options_flow_init_success(monkeypatch):
 
     result = await handler.async_step_init(user_input=user_input)
 
-    # Создана пустая entry (как в оригинальном коде)
+    # Создана entry с keepalive опцией
     assert result["type"] == "create_entry"
     assert result["title"] == ""
-    assert result["data"] == {}
+    assert result["data"] == {"keepalive": 30}
 
     # Проверяем, что конфиг-энтри обновился
     updated = hass.config_entries.updated

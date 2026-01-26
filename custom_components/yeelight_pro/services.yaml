@@ -40,3 +40,19 @@ mock_incoming_message:
       required: true
       selector:
         text:
+
+remove_stale_devices:
+  description: Remove devices that are no longer present in the gateway topology
+  fields:
+    host:
+      description: Gateway host (optional, removes from all gateways if not specified)
+      example: 192.168.26.150
+      required: false
+      selector:
+        text:
+    dry_run:
+      description: If true, only shows which devices would be removed without actually removing them
+      default: false
+      example: true
+      selector:
+        boolean:

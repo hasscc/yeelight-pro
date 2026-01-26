@@ -12,6 +12,9 @@ class FakeHass:
     def __init__(self, loop=None):
         self.loop = loop or asyncio.get_event_loop()
 
+    def async_create_task(self, coro):
+        return self.loop.create_task(coro)
+
 
 class FakeGatewayDevice:
     def __init__(self):
@@ -48,6 +51,7 @@ class FakeDevice:
         self.type = "type"
         self.firmware_version = "1.0.0"
         self.entities = {}
+        self.online = True
 
     def subscribe_attrs(self, conv):
         return {conv.attr}

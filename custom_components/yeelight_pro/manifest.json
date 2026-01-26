@@ -1,7 +1,7 @@
 {
   "domain": "yeelight_pro",
   "name": "Yeelight Pro",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "documentation": "https://github.com/hasscc/yeelight-pro",
   "issue_tracker": "https://github.com/hasscc/yeelight-pro/issues",
   "codeowners": [

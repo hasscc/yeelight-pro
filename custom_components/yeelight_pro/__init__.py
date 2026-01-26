@@ -6,7 +6,7 @@ import asyncio
 import datetime
 import voluptuous as vol
 
-from homeassistant.core import HomeAssistant, State, callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.const import (
     CONF_HOST,
@@ -92,10 +92,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     if gtw := await get_gateway_from_config(hass, entry):
         await gtw.start()
+        # Register cleanup on HA stop
         entry.async_on_unload(
             hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, gtw.stop)
         )
+        # Register cleanup on entry unload (reload/remove)
+        entry.async_on_unload(lambda: hass.async_create_task(gtw.stop()))
+    
+    # Listen for options updates to restart gateway with new config
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry):
+    """Handle options update - restart gateway with new configuration."""
+    _LOGGER.debug('Config entry updated, reloading: %s', entry.entry_id)
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -175,6 +187,14 @@ class ComponentServices:
             schema=vol.Schema({
                 vol.Optional(CONF_HOST): cv.string,
                 vol.Required('message'): cv.string,
+            }),
+        )
+
+        hass.services.async_register(
+            DOMAIN, 'remove_stale_devices', self.async_remove_stale_devices,
+            schema=vol.Schema({
+                vol.Optional(CONF_HOST): cv.string,
+                vol.Optional('dry_run', default=False): cv.boolean,
             }),
         )
 
@@ -276,6 +296,64 @@ class ComponentServices:
         message = json.dumps(msg)
         _LOGGER.info('Mock message: %s', message)
         await gtw.on_message(message.encode('utf-8'))
+
+    async def async_remove_stale_devices(self, call):
+        """Remove devices that are no longer in gateway topology."""
+        dat = call.data or {}
+        gip = dat.get(CONF_HOST)
+        dry_run = dat.get('dry_run', False)
+        
+        removed_devices = []
+        device_registry = dr.async_get(self.hass)
+        
+        for gtw in self.hass.data[DOMAIN][CONF_GATEWAYS].values():
+            if not isinstance(gtw, ProGateway):
+                continue
+            if gip and gtw.host != gip:
+                continue
+            
+            host_or_entry = gtw.entry_id or gtw.host
+            current_device_ids = set(gtw.devices.keys())
+            
+            for device_entry in dr.async_entries_for_config_entry(
+                device_registry, gtw.entry_id
+            ):
+                for identifier in device_entry.identifiers:
+                    if identifier[0] != DOMAIN:
+                        continue
+                    device_uid = identifier[1]
+                    device_id_part = device_uid.replace(f"{host_or_entry}-", "")
+                    
+                    try:
+                        device_id = int(device_id_part)
+                    except ValueError:
+                        device_id = device_id_part
+                    
+                    if device_id == gtw.host:
+                        continue
+                    
+                    if device_id not in current_device_ids:
+                        removed_devices.append({
+                            'name': device_entry.name,
+                            'id': device_id,
+                            'device_id': device_entry.id,
+                        })
+                        if not dry_run:
+                            device_registry.async_remove_device(device_entry.id)
+        
+        result_msg = f"{'Would remove' if dry_run else 'Removed'} {len(removed_devices)} stale device(s)"
+        if removed_devices:
+            device_list = "\n".join([f"- {d['name']} (ID: {d['id']})" for d in removed_devices])
+            result_msg += f":\n{device_list}"
+        
+        persistent_notification.async_create(
+            self.hass,
+            result_msg,
+            title="Yeelight Pro Stale Devices",
+            notification_id=f"{DOMAIN}-stale-devices",
+        )
+        
+        return {'removed': removed_devices, 'count': len(removed_devices)}
         
 class XEntity(Entity):
     added = False
@@ -286,6 +364,7 @@ class XEntity(Entity):
         self.hass = device.hass
         self._name = conv.attr
         self._option = option or {}
+        self._attr_available = device.online if device.online is not None else True
         self._attr_name = f'{device.name} {conv.attr}'.strip()
         # Build a gateway-scoped unique_id to avoid collisions across multiple gateways
         host_or_entry = getattr(device.gateway, "entry_id", None) or getattr(device.gateway, "host", "gw")
@@ -346,6 +425,8 @@ class XEntity(Entity):
         """Handle state update from gateway."""
         if self._name in data:
             self._attr_state = data[self._name]
+        if 'available' in data:
+            self._attr_available = data['available']
         for k in self.subscribed_attrs:
             if k not in data:
                 continue

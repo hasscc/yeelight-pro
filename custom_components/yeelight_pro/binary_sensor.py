@@ -2,7 +2,7 @@
 import logging
 
 from homeassistant.core import callback
-from homeassistant.const import STATE_ON
+from homeassistant.const import STATE_ON, EntityCategory
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorDeviceClass,
@@ -16,6 +16,7 @@ from . import (
     Converter,
     async_add_setuper,
 )
+from .core.device import GatewayDevice
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +24,9 @@ _LOGGER = logging.getLogger(__name__)
 def setuper(add_entities):
     def setup(device: XDevice, conv: Converter):
         if not (entity := device.entities.get(conv.attr)):
-            if conv.attr == 'motion':
+            if conv.attr == 'connection' and isinstance(device, GatewayDevice):
+                entity = XGatewayConnectionEntity(device, conv)
+            elif conv.attr == 'motion':
                 entity = XBinarySensorEntity(device, conv)
             else:
                 entity = XBinarySensorEntity(device, conv)
@@ -59,3 +62,28 @@ class XBinarySensorEntity(XEntity, BinarySensorEntity, RestoreEntity):
             self._attr_device_class = BinarySensorDeviceClass.MOTION
         if self._name == 'contact':
             self._attr_device_class = BinarySensorDeviceClass.DOOR
+
+
+class XGatewayConnectionEntity(XEntity, BinarySensorEntity):
+    """Binary sensor for gateway connection status."""
+    
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, device: GatewayDevice, conv: Converter, option=None):
+        super().__init__(device, conv, option)
+        self._attr_name = 'Connection'
+        self._attr_is_on = device.online
+
+    @callback
+    def async_set_state(self, data: dict):
+        """Update connection state from gateway."""
+        if 'connection' in data:
+            self._attr_is_on = data['connection']
+        elif 'available' in data:
+            self._attr_is_on = data['available']
+
+    @property
+    def available(self) -> bool:
+        """Connection sensor is always available."""
+        return True

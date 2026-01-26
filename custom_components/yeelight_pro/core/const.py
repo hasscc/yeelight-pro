@@ -3,6 +3,11 @@ DEFAULT_NAME = 'Yeelight Pro'
 
 CONF_GATEWAYS = 'gateways'
 CONF_PID = 'pid'
+CONF_KEEPALIVE = 'keepalive'
+
+DEFAULT_KEEPALIVE = 30
+MIN_KEEPALIVE = 10
+MAX_KEEPALIVE = 300
 
 SUPPORTED_DOMAINS = [
     'button',
@@ -13,6 +18,7 @@ SUPPORTED_DOMAINS = [
     'binary_sensor',
     'cover',
     'climate',
+    'update',
 ]
 
 PID_GATEWAY = 1

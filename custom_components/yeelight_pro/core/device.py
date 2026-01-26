@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from enum import IntEnum
 from typing import Dict, List, TYPE_CHECKING
@@ -104,7 +103,7 @@ class XDevice:
 
     @staticmethod
     async def from_node(gateway: "ProGateway", node: dict):
-        if node.get('nt') not in [NodeType.MESH, NodeType.MRSH_GROUP, NodeType.SCENE]:
+        if node.get('nt') not in [NodeType.MESH, NodeType.GROUP, NodeType.MRSH_GROUP, NodeType.SCENE]:
             return None
         if not (nid := node.get('id')):
             return None
@@ -117,6 +116,8 @@ class XDevice:
                 if isinstance(gateway.device, GatewayDevice):
                     await gateway.device.add_scene(node)
                 return gateway.device
+            elif dvc.nt in [NodeType.GROUP, NodeType.MRSH_GROUP]:
+                dvc = GroupDevice(node)
             elif dvc.type in DEVICE_TYPE_LIGHTS:
                 dvc = LightDevice(node)
             elif dvc.type in [DeviceType.SWITCH_PANEL]:
@@ -124,7 +125,6 @@ class XDevice:
             elif dvc.type in [DeviceType.RELAY_DOUBLE]:
                 dvc = RelayDoubleDevice(node)
             elif dvc.type in [DeviceType.SWITCH_SENSOR]:
-                # Add support for the E-Series Knob as its DeviceType ID is 128.
                 dvc = KnobDevice(node)                  
             elif dvc.type in [DeviceType.KNOB]:
                 dvc = KnobDevice(node)
@@ -168,7 +168,30 @@ class XDevice:
     async def event_fired(self, data: dict):
         decoded = self.decode_event(data)
         self.update(decoded)
+        self._fire_ha_event(data, decoded)
         _LOGGER.debug('Event fired: %s', [data, decoded])
+
+    def _fire_ha_event(self, raw_data: dict, decoded: dict) -> None:
+        """Fire event to Home Assistant event bus."""
+        if not self.hass:
+            return
+        event_type = raw_data.get('value') or raw_data.get('type')
+        if not event_type:
+            return
+        
+        from .const import DOMAIN
+        event_data = {
+            'device_id': self.id,
+            'device_name': self.name,
+            'device_type': self.type,
+            'event_type': event_type,
+            'params': raw_data.get('params') or {},
+            'decoded': decoded,
+        }
+        if self.gateway:
+            event_data['gateway_host'] = self.gateway.host
+        
+        self.hass.bus.async_fire(f"{DOMAIN}_event", event_data)
 
     @property
     def gateway(self):
@@ -201,11 +224,20 @@ class XDevice:
             return
         if not self.converters:
             _LOGGER.warning('Device has none converters: %s', [type(self), self.id])
-        for conv in self.converters.values():
-            if not conv.domain or conv.attr in self.entities:
-                continue
-            # schedule without blocking
-            self.hass.async_create_task(gateway.setup_entity(conv.domain, self, conv))
+            return
+        
+        # Collect converters that need setup
+        pending = [
+            conv for conv in self.converters.values()
+            if conv.domain and conv.attr not in self.entities
+        ]
+        
+        if not pending:
+            return
+        
+        # Setup all entities in one batch to avoid task storm
+        for conv in pending:
+            await gateway.setup_entity(conv.domain, self, conv)
 
     def subscribe_attrs(self, conv: Converter):
         attrs = {conv.attr}
@@ -217,6 +249,14 @@ class XDevice:
     def decode(self, value: dict) -> dict:
         """Decode device props for HA."""
         payload = {}
+        if 'o' in value:
+            payload['available'] = value['o']
+        if 'fv' in value:
+            payload['firmware_version'] = value['fv']
+        if 'nfv' in value:
+            payload['new_firmware_version'] = value['nfv']
+        if 'fu' in value:
+            payload['firmware_update_available'] = value['fu']
         for conv in self.converters.values():
             prop = conv.prop or conv.attr
             data = value
@@ -261,14 +301,14 @@ class XDevice:
         """Push new state to Hass entities."""
         if not value:
             return
-        attrs = value.keys()
+        attrs = set(value.keys())
+        has_available = 'available' in value
 
         for entity in self.entities.values():
-            if not (entity.subscribed_attrs & attrs):
-                continue
-            entity.async_set_state(value)
-            if entity.added:
-                entity.async_write_ha_state()
+            if has_available or (entity.subscribed_attrs & attrs):
+                entity.async_set_state(value)
+                if entity.added:
+                    entity.async_write_ha_state()
 
     async def get_node(self):
         if not self.gateway:
@@ -297,6 +337,18 @@ class GatewayDevice(XDevice):
         })
         self.id = gateway.host
         self.name = 'Yeelight Pro'
+        self._gateway_ref = gateway
+
+    def setup_converters(self):
+        super().setup_converters()
+        self.add_converter(Converter('connection', 'binary_sensor', device_class='connectivity'))
+        self.add_converter(Converter('firmware', 'update'))
+
+    @property
+    def online(self):
+        if self._gateway_ref:
+            return self._gateway_ref.is_connected
+        return None
 
     async def add_scene(self, node: dict):
         if not (nid := node.get('id')):
@@ -499,3 +551,32 @@ class ClimateDevice(XDevice):
         # NYI
         # acd: Air conditioner delay switch remaining time (unit: milliseconds)
         # aco: Whether the air conditioner is online (air conditioner online status)
+
+
+class GroupDevice(XDevice):
+    """Device representing a group of lights from the gateway."""
+    
+    def __init__(self, node: dict):
+        super().__init__(node)
+        self.member_ids = node.get('cids') or []
+        self.name = node.get('n') or f'Group {self.id}'
+
+    def setup_converters(self):
+        super().setup_converters()
+        self.add_converter(PropBoolConv('light', 'light', prop='p'))
+        self.add_converter(DurationConv('delay', parent='light'))
+        self.add_converter(DurationConv('delayoff', 'number', readable=False))
+        self.add_converter(DurationConv('transition', prop='duration', parent='light'))
+        self.add_converter(BrightnessConv('brightness', prop='l', parent='light'))
+        self.add_converter(ColorTempKelvin('color_temp', prop='ct', parent='light'))
+
+    @property
+    def color_modes(self):
+        return {ColorMode.ONOFF, ColorMode.BRIGHTNESS, ColorMode.COLOR_TEMP}
+
+    @property
+    def online(self):
+        return True
+
+    def entity_id(self, conv: Converter):
+        return f'{conv.domain}.yp_group_{self.id}_{conv.attr}'

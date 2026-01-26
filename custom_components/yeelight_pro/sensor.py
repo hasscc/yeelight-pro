@@ -68,7 +68,7 @@ class XActionEntity(XEntity, SensorEntity):
 
         self._attr_native_value = data[self._name]
         self._attr_extra_state_attributes = data
-        self.clear_task = self.hass.loop.create_task(self.clear_state())
+        self.clear_task = self.hass.async_create_task(self.clear_state())
         _LOGGER.debug('%s: State changed: %s', self.entity_id, data)
 
     async def clear_state(self):
