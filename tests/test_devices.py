@@ -34,7 +34,7 @@ def test_light():
     data = device.decode(prop)
     assert data['light'] is True
     assert data['brightness'] == round(255 * 20 / 100)
-    assert data['color_temp'] == int(1000000.0 / 4000)
+    assert data['color_temp_kelvin'] == 4000
 
 
 def test_relay():

@@ -103,12 +103,9 @@ class ColorTempKelvin(PropConv):
     maxk: int = 6500
 
     def decode(self, device: "XDevice", payload: dict, value: int):
-        """Convert degrees kelvin to mired shift."""
-        payload[self.attr] = int(1000000.0 / value)
         payload["color_temp_kelvin"] = value
 
     def encode(self, device: "XDevice", payload: dict, value: int):
-        value = int(1000000.0 / value)
         if value < self.mink:
             value = self.mink
         if value > self.maxk:

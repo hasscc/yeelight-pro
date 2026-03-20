@@ -10,7 +10,6 @@ from homeassistant.components.light import (
     ColorMode,
     LightEntityFeature,
     ATTR_BRIGHTNESS,
-    ATTR_COLOR_TEMP,
     ATTR_COLOR_TEMP_KELVIN,
     ATTR_RGB_COLOR,
     ATTR_TRANSITION,
@@ -54,7 +53,7 @@ class XLightEntity(XEntity, LightEntity):
         self._attr_supported_color_modes = set()
         if device.converters.get(ATTR_RGB_COLOR):
             self._attr_supported_color_modes.add(ColorMode.RGB)
-        if cov := device.converters.get(ATTR_COLOR_TEMP):
+        if cov := device.converters.get(ATTR_COLOR_TEMP_KELVIN):
             self._attr_supported_color_modes.add(ColorMode.COLOR_TEMP)
             if hasattr(cov, 'minm') and hasattr(cov, 'maxm'):
                 self._attr_min_mireds = cov.minm
@@ -89,7 +88,7 @@ class XLightEntity(XEntity, LightEntity):
             self.async_write_ha_state()
 
         if diff < delay:
-            check_attrs = [self._name, ATTR_BRIGHTNESS, ATTR_COLOR_TEMP, ATTR_COLOR_TEMP_KELVIN]
+            check_attrs = [self._name, ATTR_BRIGHTNESS, ATTR_COLOR_TEMP_KELVIN]
             for k in check_attrs:
                 if k not in data:
                     continue
@@ -109,8 +108,8 @@ class XLightEntity(XEntity, LightEntity):
             self._attr_is_on = data[self._name]
         if ATTR_BRIGHTNESS in data:
             self._attr_brightness = data[ATTR_BRIGHTNESS]
-        if ATTR_COLOR_TEMP in data:
-            self._attr_color_temp = data[ATTR_COLOR_TEMP]
+        if ATTR_COLOR_TEMP_KELVIN in data:
+            self._attr_color_temp_kelvin = data[ATTR_COLOR_TEMP_KELVIN]
         if ATTR_RGB_COLOR in data:
             self._attr_rgb_color = data[ATTR_RGB_COLOR]
 
@@ -123,7 +122,7 @@ class XLightEntity(XEntity, LightEntity):
         }
         if ATTR_RGB_COLOR in kwargs:
             self._attr_color_mode = ColorMode.RGB
-        elif ATTR_COLOR_TEMP in kwargs:
+        elif ATTR_COLOR_TEMP_KELVIN in kwargs:
             self._attr_color_mode = ColorMode.COLOR_TEMP
         else:
             self._attr_color_mode = None
