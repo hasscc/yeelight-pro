@@ -308,7 +308,7 @@ class LightDevice(XDevice):
         if ColorMode.BRIGHTNESS in self.color_modes:
             self.add_converter(BrightnessConv('brightness', prop='l', parent='light'))
         if ColorMode.COLOR_TEMP in self.color_modes:
-            self.add_converter(ColorTempKelvin('color_temp', prop='ct', parent='light'))
+            self.add_converter(ColorTempKelvin('color_temp_kelvin', prop='ct', parent='light'))
         if ColorMode.RGB in self.color_modes:
             self.add_converter(ColorRgbConv('rgb_color', prop='c', parent='light'))
         if self.type == DeviceType.LIGHT_WITH_ZOOM_CT:

@@ -70,6 +70,9 @@ class XLightEntity(XEntity, LightEntity):
             else:
                 self._attr_supported_color_modes = {ColorMode.ONOFF}
 
+        if self._attr_supported_color_modes:
+            self._attr_color_mode = next(iter(self._attr_supported_color_modes))
+
         if device.converters.get(ATTR_TRANSITION):
             self._attr_supported_features |= LightEntityFeature.TRANSITION
 
@@ -110,8 +113,10 @@ class XLightEntity(XEntity, LightEntity):
             self._attr_brightness = data[ATTR_BRIGHTNESS]
         if ATTR_COLOR_TEMP_KELVIN in data:
             self._attr_color_temp_kelvin = data[ATTR_COLOR_TEMP_KELVIN]
+            self._attr_color_mode = ColorMode.COLOR_TEMP
         if ATTR_RGB_COLOR in data:
             self._attr_rgb_color = data[ATTR_RGB_COLOR]
+            self._attr_color_mode = ColorMode.RGB
 
     async def async_turn_on(self, **kwargs):
         """Turn the entity on."""
