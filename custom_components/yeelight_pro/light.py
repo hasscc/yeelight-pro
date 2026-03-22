@@ -129,8 +129,6 @@ class XLightEntity(XEntity, LightEntity):
             self._attr_color_mode = ColorMode.RGB
         elif ATTR_COLOR_TEMP_KELVIN in kwargs:
             self._attr_color_mode = ColorMode.COLOR_TEMP
-        else:
-            self._attr_color_mode = None
         return await self.async_turn(kwargs[self._name], **kwargs)
 
     async def async_turn_off(self, **kwargs):
