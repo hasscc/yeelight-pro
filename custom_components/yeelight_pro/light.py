@@ -10,11 +10,13 @@ from homeassistant.components.light import (
     ColorMode,
     LightEntityFeature,
     ATTR_BRIGHTNESS,
-    ATTR_COLOR_TEMP,
     ATTR_COLOR_TEMP_KELVIN,
     ATTR_RGB_COLOR,
     ATTR_TRANSITION,
 )
+
+# ATTR_COLOR_TEMP ("color_temp", mireds) was removed in a recent HA release
+ATTR_COLOR_TEMP = "color_temp"
 
 from . import (
     XDevice,
